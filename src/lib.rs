@@ -2,6 +2,9 @@
 //! Homepage: <https://github.com/gwbres/systemctl>
 use std::process::ExitStatus;
 use std::io::{Read, Error, ErrorKind};
+use std::str::FromStr;
+use strum_macros::EnumString;
+use itertools::Itertools;
 
 /// calls systemctl $args
 fn systemctl (args: Vec<&str>) -> std::io::Result<ExitStatus> {
@@ -88,27 +91,35 @@ pub fn list_disabled_services() -> std::io::Result<Vec<String>> { Ok(list_units(
 /// Returns list of services that are currently declared as enabled
 pub fn list_enabled_services() -> std::io::Result<Vec<String>> { Ok(list_units(Some("service"), Some("enabled"))?) }
 
-/// `State` describes a Unit State in systemd
-#[derive(Copy, Clone, Debug)]
-pub enum State {
+/// `AutoStartStatus` describes the Unit current state 
+#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
+pub enum AutoStartStatus {
+    #[strum(serialize = "static")]
     Static,
-    Indirect,
+    #[strum(serialize = "enabled")]
     Enabled,
+    #[strum(serialize = "disabled")]
     Disabled,
 }
 
-impl Default for State {
-    fn default() -> State { State::Disabled }
+impl Default for AutoStartStatus {
+    fn default() -> AutoStartStatus { AutoStartStatus::Disabled }
 }
 
 /// `Type` describes a Unit declaration Type in systemd
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
 pub enum Type {
+    #[strum(serialize = "mount")]
     Mount,
+    #[strum(serialize = "service")]
     Service,
+    #[strum(serialize = "scope")]
     Scope,
+    #[strum(serialize = "socket")]
     Socket,
+    #[strum(serialize = "slice")]
     Slice,
+    #[strum(serialize = "timer")]
     Timer,
 }
 
@@ -116,18 +127,48 @@ impl Default for Type {
     fn default() -> Type { Type::Service }
 }
 
+/// `State` describes a Unit current state 
+#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
+pub enum State {
+    #[strum(serialize = "masked")]
+    Masked,
+    #[strum(serialize = "loaded")]
+    Loaded,
+}
+
+impl Default for State {
+    fn default() -> State { State::Masked }
+}
+
 /// Structure to describe a systemd `unit`
+#[derive(Clone, Debug)]
 pub struct Unit {
     /// Unit name
     pub name: String,
     /// Unit type
     pub utype: Type,
-    /// Unit description string
-    pub description: String,
+    /// Optionnal unit description
+    pub description: Option<String>,
+    /// Current state
+    pub state: State,
+    /// Auto start feature
+    pub auto_start: AutoStartStatus,
+    /// `true` if Self is actively running
+    pub active: bool,
+    /// `true` if this unit is auto started by default,
+    /// meaning, it should be manually disabled 
+    /// not to automatically start
+    pub preset: bool,
     /// Configuration script loaded when starting this unit
     pub script: String,
-    /// Systemd declaration
-    pub state: State,
+    /// Current PID 
+    pub pid: Option<u64>,
+    /// Running task(s) infos
+    pub tasks: Option<String>,
+    /// Memory consumption infos
+    pub memory: Option<String>,
+    /// Docs / `man` page(s) available for this unit
+    pub docs: Option<Vec<String>>,
 }
 
 impl Default for Unit {
@@ -138,42 +179,63 @@ impl Default for Unit {
             utype: Default::default(),
             description: Default::default(),
             script: Default::default(),
+            pid: Default::default(),
+            tasks: Default::default(),
+            memory: Default::default(),
             state: Default::default(),
+            auto_start: Default::default(),
+            preset: Default::default(),
+            active: Default::default(),
+            docs: Default::default(),
         }
     }
 }
 
 impl Unit {
-    /// Builds a new descriptor for desired `unit`
-    pub fn new (name: &str, unit_type: Type, description: &str, script: &str, state: State) -> Unit {
-        Unit {
-            name: name.to_string(),
-            script: script.to_string(),
-            description: description.to_string(),
-            utype: unit_type,
-            state: state,
-        }
-    }
     /// Builds a new `Unit` structure by retrieving 
     /// structure attributes with a `systemctl status $unit` call
     pub fn from_systemctl (name: &str) -> std::io::Result<Unit> {
         let status = status(name)?;
+        println!("STATUS \n{:#?}", status);
         let mut lines = status.lines();
-        // line[0] : xxxx.type - description
         let next = lines.next().unwrap();
         let (_, rem) = next.split_at(3); 
-        let mut content = rem.split_terminator("-");
-        let name = content.next().unwrap().trim();
-        let descriptor = content.next().unwrap().trim();
-        let mut content = name.split_terminator(".");
-        let name = content.next().unwrap();
-        let utype = content.next().unwrap();
+        let mut items = rem.split_ascii_whitespace();
+        let name = items.next().unwrap().trim();
+        let mut description : Option<String> = None;
+        /*if let Some(delim) = items.next() {
+            if delim.trim().eq("-") {
+                // --> description string is provided
+                let items : Vec<_> = items.collect();
+                description = Some(itertools::join(&items, " "));
+            }
+        }*/
+        let items : Vec<_> = name.split_terminator(".").collect();
+        let name = items[0]; 
+        let utype = Type::from_str(items[1].trim()).unwrap(); 
+        let mut script: String = String::new();
+        let mut pid : Option<u64> = None;
+        let mut state: State = State::default();
+        let mut auto_start : AutoStartStatus = AutoStartStatus::default();
+        let mut active: bool = false;
+        let mut preset: bool = false;
+        let mut memory: Option<String> = None;
+        let mut docs: Option<Vec<String>> = None;
         for line in lines {
             let line = line.trim_start();
-            println!("LINE: \"{}\"", line);
             if line.starts_with("Loaded:") {
-                //LINE: "Loaded: loaded (/usr/lib/systemd/system/sshd.service; enabled; vendor preset: enabled)"
-                let line = line.split_at(7+9); // "Loader: " + "loaded_("
+                let (_, line) = line.split_at(8); // "Loaded: "
+                if line.starts_with("loaded") {
+                    state = State::Loaded;
+                    let (_, rem) = line.split_at(1); // "("
+                    let (rem, _) = rem.split_at(rem.len()-1); // ")"
+                    let items : Vec<_> = rem.split_terminator(";").collect();
+                    script = items[0].trim().to_string();
+                    auto_start = AutoStartStatus::from_str(items[1].trim()).unwrap();
+                    preset = items[2].trim().ends_with("enabled") 
+                } else if line.starts_with("masked") {
+                    state = State::Masked;
+                }
             
             } else if line.starts_with("Active: ") {
                 //LINE: "Active: active (running) since Fri 2022-03-04 08:29:34 CET; 1 months 8 days ago"
@@ -183,21 +245,45 @@ impl Unit {
                 //LINE: "man:sshd_config(5)"
 
             } else if line.starts_with("Main PID: ") {
-                //LINE: "Main PID: 1050 (sshd)"
+                let items : Vec<_> = line.split_ascii_whitespace().collect();
+                pid = Some(u64::from_str_radix(items[2].trim(), 10).unwrap());
 
             } else if line.starts_with("CGroup: ") {
                 //LINE: "CGroup: /system.slice/sshd.service"
                 //LINE: "└─1050 /usr/sbin/sshd -D"
+            } else if line.starts_with("Tasks: ") {
+
+            } else if line.starts_with("Memory: ") {
+                let line = line.split_at(8).1;
+                memory = Some(line.to_string())
             }
         }
-        println!("Name: {} - Type: {} - Descriptor: {}", name, utype, descriptor);
         Ok(Unit {
             name: name.to_string(),
-            description: descriptor.to_string(),
-            script: Default::default(),
-            state: Default::default(),
-            utype: Default::default(),
+            description, 
+            script,
+            utype, 
+            pid,
+            state,
+            auto_start,
+            preset,
+            active,
+            tasks: Default::default(),
+            memory,
+            docs,
         })
+    }
+    /// Restarts Self by invocking `systemctl`
+    pub fn restart (&self) -> std::io::Result<ExitStatus> {
+        restart(&self.name)
+    }
+    /// Returns verbose status for Self 
+    pub fn status (&self) -> std::io::Result<String> {
+        status(&self.name)
+    }
+    /// Returns `true` if Self is actively running
+    pub fn is_active (&self) -> std::io::Result<bool> {
+        is_active(&self.name)
     }
 }
 
@@ -225,7 +311,13 @@ mod test {
         println!("enabled services: {:#?}", services)
     }
     #[test]
-    fn test_unit_construction() {
-        let _ = Unit::from_systemctl("sshd").unwrap();
+    fn test_service_unit_construction() {
+        let units = list_units(Some("service"), Some("enabled")).unwrap(); // all units
+        for unit in units {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            println!("{:#?}", unit);
+            let u = Unit::from_systemctl(&unit).unwrap();
+            //println!("{:#?}", u)
+        }
     }
 }
