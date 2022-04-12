@@ -1,0 +1,9 @@
+[package]
+name = "systemctl"
+version = "0.0.1"
+license = "MIT OR Apache-2.0"
+authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
+description = "Small crate to interact with systemd units"
+homepage = "https://github.com/gwbres/systemctl"
+edition = "2018"
+readme = "README.md"
