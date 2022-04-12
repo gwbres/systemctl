@@ -100,6 +100,8 @@ pub enum AutoStartStatus {
     Enabled,
     #[strum(serialize = "disabled")]
     Disabled,
+    #[strum(serialize = "generated")]
+    Generated,
 }
 
 impl Default for AutoStartStatus {
@@ -109,6 +111,8 @@ impl Default for AutoStartStatus {
 /// `Type` describes a Unit declaration Type in systemd
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
 pub enum Type {
+    #[strum(serialize = "automount")]
+    AutoMount,
     #[strum(serialize = "mount")]
     Mount,
     #[strum(serialize = "service")]
@@ -140,6 +144,30 @@ impl Default for State {
     fn default() -> State { State::Masked }
 }
 
+/// Process
+#[derive(Clone, Debug)]
+pub struct Process {
+    /// pid
+    pid: u64,
+    /// command line that was executed
+    command: String,
+    /// code
+    code: String,
+    /// status
+    status: String,
+}
+
+impl Default for Process {
+    fn default() -> Process {
+        Process {
+            pid: 0,
+            command: Default::default(),
+            code: Default::default(),
+            status: Default::default(),
+        }
+    }
+}
+
 /// Structure to describe a systemd `unit`
 #[derive(Clone, Debug)]
 pub struct Unit {
@@ -161,12 +189,18 @@ pub struct Unit {
     pub preset: bool,
     /// Configuration script loaded when starting this unit
     pub script: String,
+    /// Optionnal process description
+    pub process: Option<String>,
     /// Current PID 
     pub pid: Option<u64>,
     /// Running task(s) infos
     pub tasks: Option<String>,
     /// Memory consumption infos
     pub memory: Option<String>,
+    /// mounted partition (`What`), if this is a `mount`/`automount` unit
+    pub mounted: Option<String>,
+    /// Mount point (`Where`), if this is a `mount`/`automount` unit
+    pub mountpoint: Option<String>,
     /// Docs / `man` page(s) available for this unit
     pub docs: Option<Vec<String>>,
 }
@@ -187,6 +221,9 @@ impl Default for Unit {
             preset: Default::default(),
             active: Default::default(),
             docs: Default::default(),
+            process: Default::default(),
+            mounted: Default::default(),
+            mountpoint: Default::default(),
         }
     }
 }
@@ -203,23 +240,26 @@ impl Unit {
         let mut items = rem.split_ascii_whitespace();
         let name = items.next().unwrap().trim();
         let mut description : Option<String> = None;
-        /*if let Some(delim) = items.next() {
+        if let Some(delim) = items.next() {
             if delim.trim().eq("-") {
                 // --> description string is provided
                 let items : Vec<_> = items.collect();
                 description = Some(itertools::join(&items, " "));
             }
-        }*/
+        }
         let items : Vec<_> = name.split_terminator(".").collect();
         let name = items[0]; 
         let utype = Type::from_str(items[1].trim()).unwrap(); 
         let mut script: String = String::new();
+        let mut process: Option<Process> = None;
         let mut pid : Option<u64> = None;
         let mut state: State = State::default();
         let mut auto_start : AutoStartStatus = AutoStartStatus::default();
         let mut active: bool = false;
         let mut preset: bool = false;
         let mut memory: Option<String> = None;
+        let mut mounted: Option<String> = None;
+        let mut mountpoint: Option<String> = None;
         let mut docs: Option<Vec<String>> = None;
         for line in lines {
             let line = line.trim_start();
@@ -232,7 +272,10 @@ impl Unit {
                     let items : Vec<_> = rem.split_terminator(";").collect();
                     script = items[0].trim().to_string();
                     auto_start = AutoStartStatus::from_str(items[1].trim()).unwrap();
-                    preset = items[2].trim().ends_with("enabled") 
+                    if items.len() > 2 {
+                        // preset is optionnal ?
+                        preset = items[2].trim().ends_with("enabled") 
+                    }
                 } else if line.starts_with("masked") {
                     state = State::Masked;
                 }
@@ -243,10 +286,21 @@ impl Unit {
             } else if line.starts_with("Docs: ") {
                 //LINE: "Docs: man:sshd(8)"
                 //LINE: "man:sshd_config(5)"
+            
+            } else if line.starts_with("What: ") {
+                mounted = Some(line.split_at(6).1.trim().to_string());
+            } else if line.starts_with("Where: ") {
+                mountpoint = Some(line.split_at(7).1.trim().to_string());
 
             } else if line.starts_with("Main PID: ") {
                 let items : Vec<_> = line.split_ascii_whitespace().collect();
                 pid = Some(u64::from_str_radix(items[2].trim(), 10).unwrap());
+            
+            } else if line.starts_with("Process: ") {
+                let items : Vec<_> = line.split_ascii_whitespace().collect();
+                let proc_pid = u64::from_str_radix(items[1].trim(), 10).unwrap();
+                //let cli;
+                //Process: 640 ExecStartPre=/usr/sbin/sshd -t (code=exited, status=0/SUCCESS)
 
             } else if line.starts_with("CGroup: ") {
                 //LINE: "CGroup: /system.slice/sshd.service"
@@ -269,7 +323,10 @@ impl Unit {
             preset,
             active,
             tasks: Default::default(),
+            process: Default::default(),
             memory,
+            mounted,
+            mountpoint,
             docs,
         })
     }
@@ -312,12 +369,15 @@ mod test {
     }
     #[test]
     fn test_service_unit_construction() {
-        let units = list_units(Some("service"), Some("enabled")).unwrap(); // all units
+        let units = list_units(None, None).unwrap(); // all units
         for unit in units {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            println!("{:#?}", unit);
-            let u = Unit::from_systemctl(&unit).unwrap();
-            //println!("{:#?}", u)
+            let unit = unit.as_str();
+            let c0 = unit.chars().nth(0).unwrap();
+            if c0.is_alphanumeric() {
+                // valid unit name --> run test
+                let u = Unit::from_systemctl(&unit).unwrap();
+                println!("{:#?}", u)
+            }
         }
     }
 }
