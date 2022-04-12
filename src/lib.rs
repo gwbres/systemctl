@@ -57,16 +57,6 @@ pub fn is_active (unit: &str) -> std::io::Result<bool> {
     Ok(status.contains("Active: active (running)"))
 }
 
-/*
-/// `State` describes a Unit State in systemd
-pub State {
-    Static,
-    Indirect,
-    Enabled,
-    Disabled,
-}
-*/
-
 /// Returns list of units extracted from systemctl listing.  
 ///  + type filter: optionnal --type filter
 ///  + state filter: optionnal --state filter
@@ -97,6 +87,14 @@ pub fn list_disabled_services() -> std::io::Result<Vec<String>> { Ok(list_units(
 pub fn list_enabled_services() -> std::io::Result<Vec<String>> { Ok(list_units(Some("service"), Some("enabled"))?) }
 
 /*
+/// `State` describes a Unit State in systemd
+pub State {
+    Static,
+    Indirect,
+    Enabled,
+    Disabled,
+}
+
 /// Structure to describe a systemd `unit`
 struct Unit {
     /// Unit name
@@ -140,6 +138,7 @@ impl Unit {
             if let Ok(content) = String::from_utf8(stdout) {
                 let mut lines = content.lines();
                 let next = lines.next();
+                let (_, rem) = 
                 Ok(Unit::default())
             } else {
                 Err(Error::new(ErrorKind::InvalidData, "Invalid utf8 data in stdout"))
@@ -149,9 +148,7 @@ impl Unit {
         }
     }
 }
-*/
 
-/*
 //}
 /// ● arp-ethers.service - Load static arp entries
 ///    Loaded: loaded (/usr/lib/systemd/system/arp-ethers.service; disabled; vendor preset:
