@@ -172,16 +172,18 @@ impl Unit {
             let line = line.trim_start();
             println!("LINE: \"{}\"", line);
             if line.starts_with("Loaded:") {
-            //LINE: "Loaded: loaded (/usr/lib/systemd/system/sshd.service; enabled; vendor preset: enabled)"
+                //LINE: "Loaded: loaded (/usr/lib/systemd/system/sshd.service; enabled; vendor preset: enabled)"
+                let line = line.split_at(7+9); // "Loader: " + "loaded_("
+            
             } else if line.starts_with("Active: ") {
-
-            //LINE: "Active: active (running) since Fri 2022-03-04 08:29:34 CET; 1 months 8 days ago"
+                //LINE: "Active: active (running) since Fri 2022-03-04 08:29:34 CET; 1 months 8 days ago"
+            
             } else if line.starts_with("Docs: ") {
+                //LINE: "Docs: man:sshd(8)"
+                //LINE: "man:sshd_config(5)"
 
-            //LINE: "Docs: man:sshd(8)"
-            //LINE: "man:sshd_config(5)"
             } else if line.starts_with("Main PID: ") {
-            //LINE: "Main PID: 1050 (sshd)"
+                //LINE: "Main PID: 1050 (sshd)"
 
             } else if line.starts_with("CGroup: ") {
                 //LINE: "CGroup: /system.slice/sshd.service"
