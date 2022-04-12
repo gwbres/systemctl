@@ -4,6 +4,9 @@
 use std::process::ExitStatus;
 use std::io::{Read, Error, ErrorKind};
 /*
+// list all disabled units
+//systemctl list-unit-files --type service --state disabled
+
 // Structure to describe a systemd `unit`
 //struct Unit {
     /// Service script loaded when starting this unit
@@ -81,6 +84,3 @@ pub fn is_active (unit: &str) -> std::io::Result<bool> {
         }
     }
 }
-
-// list all disabled units
-//systemctl list-unit-files --type service --state disabled
