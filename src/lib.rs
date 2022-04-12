@@ -375,6 +375,7 @@ mod test {
             let c0 = unit.chars().nth(0).unwrap();
             if c0.is_alphanumeric() {
                 // valid unit name --> run test
+                println!("{}", unit);
                 let u = Unit::from_systemctl(&unit).unwrap();
                 println!("{:#?}", u)
             }
