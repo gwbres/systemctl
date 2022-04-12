@@ -57,7 +57,7 @@ pub fn is_active (unit: &str) -> std::io::Result<bool> {
     Ok(status.contains("Active: active (running)"))
 }
 
-/// Returns list of units extracted from systemctl listing.  
+/// Returns list of units extracted from systemctl listing.   
 ///  + type filter: optionnal --type filter
 ///  + state filter: optionnal --state filter
 fn list_units (type_filter: Option<&str>, state_filter: Option<&str>) -> std::io::Result<Vec<String>> {
@@ -122,6 +122,8 @@ pub struct Unit {
     pub name: String,
     /// Unit type
     pub utype: Type,
+    /// Unit description string
+    pub description: String,
     /// Configuration script loaded when starting this unit
     pub script: String,
     /// Systemd declaration
@@ -134,6 +136,7 @@ impl Default for Unit {
         Unit {
             name: Default::default(), 
             utype: Default::default(),
+            description: Default::default(),
             script: Default::default(),
             state: Default::default(),
         }
@@ -142,57 +145,59 @@ impl Default for Unit {
 
 impl Unit {
     /// Builds a new descriptor for desired `unit`
-    pub fn new (name: &str, unit_type: Type, script: &str, state: State) -> Unit {
+    pub fn new (name: &str, unit_type: Type, description: &str, script: &str, state: State) -> Unit {
         Unit {
             name: name.to_string(),
             script: script.to_string(),
+            description: description.to_string(),
             utype: unit_type,
             state: state,
         }
     }
-}
-/*
     /// Builds a new `Unit` structure by retrieving 
     /// structure attributes with a `systemctl status $unit` call
     pub fn from_systemctl (name: &str) -> std::io::Result<Unit> {
         let status = status(name)?;
-        let mut stdout : Vec<u8> = Vec::new();
-        if let Ok(_) = status.stdout.unwrap().read_to_end(&mut stdout) {
-            if let Ok(content) = String::from_utf8(stdout) {
-                let mut lines = content.lines();
-                let next = lines.next();
-                let (_, rem) = 
-                Ok(Unit::default())
-            } else {
-                Err(Error::new(ErrorKind::InvalidData, "Invalid utf8 data in stdout"))
+        let mut lines = status.lines();
+        // line[0] : xxxx.type - description
+        let next = lines.next().unwrap();
+        let (_, rem) = next.split_at(3); 
+        let mut content = rem.split_terminator("-");
+        let name = content.next().unwrap().trim();
+        let descriptor = content.next().unwrap().trim();
+        let mut content = name.split_terminator(".");
+        let name = content.next().unwrap();
+        let utype = content.next().unwrap();
+        for line in lines {
+            let line = line.trim_start();
+            println!("LINE: \"{}\"", line);
+            if line.starts_with("Loaded:") {
+            //LINE: "Loaded: loaded (/usr/lib/systemd/system/sshd.service; enabled; vendor preset: enabled)"
+            } else if line.starts_with("Active: ") {
+
+            //LINE: "Active: active (running) since Fri 2022-03-04 08:29:34 CET; 1 months 8 days ago"
+            } else if line.starts_with("Docs: ") {
+
+            //LINE: "Docs: man:sshd(8)"
+            //LINE: "man:sshd_config(5)"
+            } else if line.starts_with("Main PID: ") {
+            //LINE: "Main PID: 1050 (sshd)"
+
+            } else if line.starts_with("CGroup: ") {
+                //LINE: "CGroup: /system.slice/sshd.service"
+                //LINE: "└─1050 /usr/sbin/sshd -D"
             }
-        } else {
-            Err(Error::new(ErrorKind::InvalidData, "systemctl stdout is empty"))
         }
+        println!("Name: {} - Type: {} - Descriptor: {}", name, utype, descriptor);
+        Ok(Unit {
+            name: name.to_string(),
+            description: descriptor.to_string(),
+            script: Default::default(),
+            state: Default::default(),
+            utype: Default::default(),
+        })
     }
 }
-
-//}
-/// ● arp-ethers.service - Load static arp entries
-///    Loaded: loaded (/usr/lib/systemd/system/arp-ethers.service; disabled; vendor preset:
-///    disabled)
-///       Active: inactive (dead)
-///            Docs: man:arp(8)
-///                  man:ethers(5)
-///
-///╰─$ systemctl status tuned.service
-///1 ↵
-///● tuned.service - Dynamic System Tuning Daemon
-///   Loaded: loaded (/usr/lib/systemd/system/tuned.service; enabled; vendor preset: enabled)
-///      Active: active (running) since Fri 2022-03-04 08:29:39 CET; 1 months 8 days ago
-///           Docs: man:tuned(8)
-///                      man:tuned.conf(5)
-///                                 man:tuned-adm(8)
-///                                  Main PID: 1053 (tuned)
-///                                     CGroup: /system.slice/tuned.service
-///                                                └─1053 /usr/bin/python2 -Es /usr/sbin/tuned -l
-///                                                -P
-*/
 
 #[cfg(test)]
 mod test {
@@ -200,16 +205,25 @@ mod test {
     #[test]
     fn test_status() {
         let status = status("sshd");
-        println!("{:#?}", status);
+        println!("sshd status : {:#?}", status)
+    }
+    #[test]
+    fn test_is_active() {
+        let active = is_active("sshd").unwrap();
+        println!("sshd active: {:#?}", active)
     }
     #[test]
     fn test_disabled_services() {
         let services = list_disabled_services().unwrap();
-        println!("{:#?}", services);
+        println!("disabled services: {:#?}", services)
     }
     #[test]
     fn test_enabled_services() {
         let services = list_enabled_services().unwrap();
-        println!("{:#?}", services);
+        println!("enabled services: {:#?}", services)
+    }
+    #[test]
+    fn test_unit_construction() {
+        let _ = Unit::from_systemctl("sshd").unwrap();
     }
 }
