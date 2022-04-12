@@ -43,13 +43,13 @@ fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
 }
 
 /// Forces given `unit` (re)start
-pub fn restart (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec![unit, "restart"]) }
+pub fn restart (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["restart", unit]) }
 
 /// Forces given `unit` to stop
-pub fn stop (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec![unit, "stop"]) }
+pub fn stop (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["stop", unit]) }
 
 /// Returns raw status from `systemctl status $unit` call
-pub fn status (unit: &str) -> std::io::Result<String> { systemctl_capture(vec![unit, "status"]) }
+pub fn status (unit: &str) -> std::io::Result<String> { systemctl_capture(vec!["status", unit]) }
 
 /// Returns `true` if given `unit` is actively running
 pub fn is_active (unit: &str) -> std::io::Result<bool> {
@@ -75,7 +75,9 @@ fn list_units (type_filter: Option<&str>, state_filter: Option<&str>) -> std::io
     let lines = content.lines();
     for l in lines.skip(1) { // header labels
         let parsed : Vec<_> = l.split_ascii_whitespace().collect();
-        result.push(parsed[0].to_string())
+        if parsed.len() == 2 {
+            result.push(parsed[0].to_string())
+        }
     }
     Ok(result)
 }
@@ -176,7 +178,7 @@ impl Unit {
 ///    disabled)
 ///       Active: inactive (dead)
 ///            Docs: man:arp(8)
-///                       man:ethers(5)
+///                  man:ethers(5)
 ///
 ///╰─$ systemctl status tuned.service
 ///1 ↵
@@ -191,3 +193,23 @@ impl Unit {
 ///                                                └─1053 /usr/bin/python2 -Es /usr/sbin/tuned -l
 ///                                                -P
 */
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_status() {
+        let status = status("sshd");
+        println!("{:#?}", status);
+    }
+    #[test]
+    fn test_disabled_services() {
+        let services = list_disabled_services().unwrap();
+        println!("{:#?}", services);
+    }
+    #[test]
+    fn test_enabled_services() {
+        let services = list_enabled_services().unwrap();
+        println!("{:#?}", services);
+    }
+}
