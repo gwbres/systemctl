@@ -86,25 +86,44 @@ pub fn list_disabled_services() -> std::io::Result<Vec<String>> { Ok(list_units(
 /// Returns list of services that are currently declared as enabled
 pub fn list_enabled_services() -> std::io::Result<Vec<String>> { Ok(list_units(Some("service"), Some("enabled"))?) }
 
-/*
 /// `State` describes a Unit State in systemd
-pub State {
+#[derive(Copy, Clone, Debug)]
+pub enum State {
     Static,
     Indirect,
     Enabled,
     Disabled,
 }
 
+impl Default for State {
+    fn default() -> State { State::Disabled }
+}
+
+/// `Type` describes a Unit declaration Type in systemd
+#[derive(Copy, Clone, Debug)]
+pub enum Type {
+    Mount,
+    Service,
+    Scope,
+    Socket,
+    Slice,
+    Timer,
+}
+
+impl Default for Type {
+    fn default() -> Type { Type::Service }
+}
+
 /// Structure to describe a systemd `unit`
-struct Unit {
+pub struct Unit {
     /// Unit name
-    name: String, 
-    /// Service script loaded when starting this unit
-    script: String,
-    /// Current service status
-    active: bool,
-    /// `true` if this unit is automatically started
-    enabled: bool,
+    pub name: String,
+    /// Unit type
+    pub utype: Type,
+    /// Configuration script loaded when starting this unit
+    pub script: String,
+    /// Systemd declaration
+    pub state: State,
 }
 
 impl Default for Unit {
@@ -112,23 +131,25 @@ impl Default for Unit {
     fn default() -> Unit {
         Unit {
             name: Default::default(), 
+            utype: Default::default(),
             script: Default::default(),
-            active: Default::default(),
-            enabled: Default::default(),
+            state: Default::default(),
         }
     }
 }
 
 impl Unit {
     /// Builds a new descriptor for desired `unit`
-    pub fn new (name: &str, script: &str, active: bool, enabled: bool) -> Unit {
+    pub fn new (name: &str, unit_type: Type, script: &str, state: State) -> Unit {
         Unit {
             name: name.to_string(),
             script: script.to_string(),
-            active,
-            enabled,
+            utype: unit_type,
+            state: state,
         }
     }
+}
+/*
     /// Builds a new `Unit` structure by retrieving 
     /// structure attributes with a `systemctl status $unit` call
     pub fn from_systemctl (name: &str) -> std::io::Result<Unit> {
