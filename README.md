@@ -34,3 +34,25 @@ systemctl::list_units(Some("service"), None);
 // by adding a --state filter
 systemctl::list_units(Some("service"), Some("enabled"));
 ```
+
+## Unit structure
+
+Use the unit structure for more information
+
+```rust
+let unit = systemctl::Unit::from_systemctl("sshd")
+    .unwrap();
+unit.restart().unwrap();
+println!("active: {}", unit.active);
+println!("preset: {}", unit.preset);
+println!("auto_start (enabled): {}", unit.auto_start);
+println!("config script : {}", unit.script);
+println!("pid: {}", unit.pid);
+println!("Running task(s): {}", unit.tasks.unwrap());
+println!("Memory consumption: {}", unit.memory.unwrap());
+```
+
+## TODO
+
+* [ ] conclude `from_systemctl()` parser
+* [ ] restart(), status() syscalls
