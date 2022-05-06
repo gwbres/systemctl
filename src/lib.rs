@@ -386,7 +386,16 @@ mod test {
             let c0 = unit.chars().nth(0).unwrap();
             if c0.is_alphanumeric() { // valid unit name --> run test
                 let u = Unit::from_systemctl(&unit).unwrap();
-                println!("Unit: {:#?}", u)
+                println!("####################################");
+                println!("Unit: {:#?}", u);
+                println!("active: {}", u.active);
+                println!("preset: {}", u.preset);
+                println!("auto_start (enabled): {:#?}", u.auto_start);
+                println!("config script : {}", u.script);
+                println!("pid: {:?}", u.pid);
+                println!("Running task(s): {:?}", u.tasks);
+                println!("Memory consumption: {:?}", u.memory);
+                println!("####################################")
             }
         }
     }
