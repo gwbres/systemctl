@@ -54,5 +54,7 @@ println!("Memory consumption: {}", unit.memory.unwrap());
 
 ## TODO
 
-* [ ] conclude `from_systemctl()` parser
-* [ ] restart(), status() syscalls
+* [ ] parse all known attributes in `from_systemctl`
+* [ ] systemctl status seems to return an errorcode when service is "dead". 
+We should find a correct condition on the error code, to permit
+stdout parsing / interpretation
