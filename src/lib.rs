@@ -57,7 +57,7 @@ pub fn status (unit: &str) -> std::io::Result<String> { systemctl_capture(vec!["
 /// Returns `true` if given `unit` is actively running
 pub fn is_active (unit: &str) -> std::io::Result<bool> {
     let status = systemctl_capture(vec!["is-active", unit])?;
-    Ok(status.contains("active"))
+    Ok(!status.contains("inactive"))
 }
 
 /// Returns list of units extracted from systemctl listing.   
@@ -363,7 +363,8 @@ mod test {
     fn test_is_active() {
         let active = is_active("sshd");
         assert_eq!(active.is_ok(), true);
-        println!("sshd active: {:#?}", active)
+        let active = is_active("dropbear");
+        assert_eq!(active.is_ok(), true);
     }
     #[test]
     fn test_disabled_services() {
