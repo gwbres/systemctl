@@ -4,7 +4,6 @@ use std::process::ExitStatus;
 use std::io::{Read, Error, ErrorKind};
 use std::str::FromStr;
 use strum_macros::EnumString;
-use itertools::Itertools;
 
 /// calls systemctl $args
 fn systemctl (args: Vec<&str>) -> std::io::Result<ExitStatus> {
@@ -18,12 +17,12 @@ fn systemctl (args: Vec<&str>) -> std::io::Result<ExitStatus> {
 /// calls systemctl $args and captures stdout
 fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
     let mut child = std::process::Command::new("/usr/bin/systemctl")
-        .args(args)
+        .args(args.clone())
         .stdout(std::process::Stdio::piped())
         .spawn()?;
     let exitcode = child.wait()?;
-    match exitcode.success() {
-        true => {
+    //match exitcode.success() {
+    //    true => {
             let mut stdout : Vec<u8> = Vec::new();
             if let Ok(size) = child.stdout.unwrap().read_to_end(&mut stdout) {
                 if size > 0 {
@@ -38,11 +37,12 @@ fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
             } else {
                 Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
             }
-        },
-        false => {
-            Err(Error::new(ErrorKind::Other, "systemctl call failed"))
-        }
-    }
+        //},
+        /*false => {
+            Err(Error::new(ErrorKind::Other,
+                format!("/usr/bin/systemctl {:?} failed", args)))
+        }*/
+    //}
 }
 
 /// Forces given `unit` (re)start
@@ -102,6 +102,8 @@ pub enum AutoStartStatus {
     Disabled,
     #[strum(serialize = "generated")]
     Generated,
+    #[strum(serialize = "indirect")]
+    Indirect,
 }
 
 impl Default for AutoStartStatus {
@@ -125,6 +127,10 @@ pub enum Type {
     Slice,
     #[strum(serialize = "timer")]
     Timer,
+    #[strum(serialize = "path")]
+    Path,
+    #[strum(serialize = "target")]
+    Target,
 }
 
 impl Default for Type {
@@ -233,7 +239,6 @@ impl Unit {
     /// structure attributes with a `systemctl status $unit` call
     pub fn from_systemctl (name: &str) -> std::io::Result<Unit> {
         let status = status(name)?;
-        println!("STATUS \n{:#?}", status);
         let mut lines = status.lines();
         let next = lines.next().unwrap();
         let (_, rem) = next.split_at(3); 
@@ -249,6 +254,7 @@ impl Unit {
         }
         let items : Vec<_> = name.split_terminator(".").collect();
         let name = items[0]; 
+        // `type` is deduced from .extension
         let utype = Type::from_str(items[1].trim()).unwrap(); 
         let mut script: String = String::new();
         let mut process: Option<Process> = None;
@@ -374,12 +380,24 @@ mod test {
         let units = list_units(None, None).unwrap(); // all units
         for unit in units {
             let unit = unit.as_str();
+            if unit.contains("@") {
+                // not testing this one
+                // would require @x service # identification / enumeration
+                continue
+            }
             let c0 = unit.chars().nth(0).unwrap();
-            if c0.is_alphanumeric() {
-                // valid unit name --> run test
-                println!("{}", unit);
+            if c0.is_alphanumeric() { // valid unit name --> run test
                 let u = Unit::from_systemctl(&unit).unwrap();
-                println!("{:#?}", u)
+                println!("####################################");
+                println!("Unit: {:#?}", u);
+                println!("active: {}", u.active);
+                println!("preset: {}", u.preset);
+                println!("auto_start (enabled): {:#?}", u.auto_start);
+                println!("config script : {}", u.script);
+                println!("pid: {:?}", u.pid);
+                println!("Running task(s): {:?}", u.tasks);
+                println!("Memory consumption: {:?}", u.memory);
+                println!("####################################")
             }
         }
     }
