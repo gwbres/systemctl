@@ -249,6 +249,11 @@ impl Unit {
     /// Builds a new `Unit` structure by retrieving 
     /// structure attributes with a `systemctl status $unit` call
     pub fn from_systemctl (name: &str) -> std::io::Result<Unit> {
+        if let Ok(false) = exists(name) {
+            return Err(
+                Error::new(
+                    ErrorKind::InvalidData, format!("Unit or service \"{}\" does not exist", name)))
+        }
         let status = status(name)?;
         let mut lines = status.lines();
         let next = lines.next().unwrap();
@@ -397,6 +402,11 @@ mod test {
     fn test_enabled_services() {
         let services = list_enabled_services().unwrap();
         println!("enabled services: {:#?}", services)
+    }
+    #[test]
+    fn test_non_existing_unit() {
+        let unit = Unit::from_systemctl("non-existing");
+        assert_eq!(unit.is_err(), true);
     }
     #[test]
     fn test_service_unit_construction() {
