@@ -67,10 +67,12 @@ pub fn is_active (unit: &str) -> std::io::Result<bool> {
 /// now actively running
 pub fn isolate (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["isolate", unit]) }
 
-/// Freezes (halts) given unit
+/// Freezes (halts) given unit.
+/// This operation might not be feasible.
 pub fn freeze (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["freeze", unit]) }
 
-/// Unfreezes given unit (recover from halted state)
+/// Unfreezes given unit (recover from halted state).
+/// This operation might not be feasible.
 pub fn unfreeze (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["thaw", unit]) }
 
 /// Returns `true` if given `unit` exists,
@@ -254,12 +256,12 @@ pub struct Unit {
     pub preset: bool,
     /// Configuration script loaded when starting this unit
     pub script: String,
-    /// Optionnal process description
+    /// Optionnal process description (main tasklet "name")
     pub process: Option<String>,
-    /// Current PID 
+    /// Optionnal process ID number (main tasklet pid)
     pub pid: Option<u64>,
     /// Running task(s) infos
-    pub tasks: Option<String>,
+    pub tasks: Option<u64>,
     /// Memory consumption infos
     pub memory: Option<String>,
     /// mounted partition (`What`), if this is a `mount`/`automount` unit
@@ -321,12 +323,13 @@ impl Unit {
         // `type` is deduced from .extension
         let utype = Type::from_str(items[1].trim()).unwrap(); 
         let mut script: String = String::new();
-        let mut process: Option<Process> = None;
+        
         let mut pid : Option<u64> = None;
+        let mut process: Option<String> = None;
+        
         let mut state: State = State::default();
         let mut auto_start : AutoStartStatus = AutoStartStatus::default();
         
-        let mut active: bool = false;
         let mut preset: bool = false;
         let mut memory: Option<String> = None;
         let mut mounted: Option<String> = None;
@@ -355,28 +358,31 @@ impl Unit {
                 }
             
             } else if line.starts_with("Active: ") {
-                //LINE: "Active: active (running) since Fri 2022-03-04 08:29:34 CET; 1 months 8 days ago"
             
             } else if line.starts_with("Docs: ") {
                 is_doc = true;
-                let line = line.trim_start();
                 let (_, line) = line.split_at(6); // remove "Docs: "
                 if let Ok(doc) = Doc::from_str(line) {
                     docs.push(doc)
                 }
             
-            } else if line.starts_with("What: ") {
+            } else if line.starts_with("What: ") { // mountpoint infos
                 mounted = Some(line.split_at(6).1.trim().to_string());
-            } else if line.starts_with("Where: ") {
+            } else if line.starts_with("Where: ") { // mountpoint infos
                 mountpoint = Some(line.split_at(7).1.trim().to_string());
 
             } else if line.starts_with("Main PID: ") {
-                let items : Vec<_> = line.split_ascii_whitespace().collect();
+                // Main PID: 787 (gpm)
+                let items : Vec<&str> = line.split_ascii_whitespace().collect();
                 pid = Some(u64::from_str_radix(items[2].trim(), 10).unwrap());
+                process = Some(items[3]
+                    .replace(")", "")
+                    .replace("(","")
+                    .to_string())
             
             } else if line.starts_with("Process: ") {
-                let items : Vec<_> = line.split_ascii_whitespace().collect();
-                let proc_pid = u64::from_str_radix(items[1].trim(), 10).unwrap();
+                //let items : Vec<_> = line.split_ascii_whitespace().collect();
+                //let proc_pid = u64::from_str_radix(items[1].trim(), 10).unwrap();
                 //let cli;
                 //Process: 640 ExecStartPre=/usr/sbin/sshd -t (code=exited, status=0/SUCCESS)
 
@@ -403,13 +409,13 @@ impl Unit {
             description, 
             script,
             utype, 
+            process,
             pid,
             state,
             auto_start,
             preset,
-            active,
+            active: is_active(name)?,
             tasks: Default::default(),
-            process: Default::default(),
             memory,
             mounted,
             mountpoint,
@@ -441,11 +447,13 @@ impl Unit {
     }
     /// `Freezes` Self, halts self and CPU load will
     /// no longer be dedicated to its execution.
+    /// This operation might not be feasible.
     /// `unfreeze()` is the mirror operation
     pub fn freeze (&self) -> std::io::Result<ExitStatus> {
         freeze(&self.name)
     }
-    /// `Unfreezes` Self, exists halted state
+    /// `Unfreezes` Self, exists halted state.
+    /// This operation might not be feasible.
     pub fn unfreeze (&self) -> std::io::Result<ExitStatus> {
         unfreeze(&self.name)
     }
