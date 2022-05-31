@@ -203,12 +203,23 @@ impl Default for Process {
 pub enum Doc {
     /// Man page is available
     Man(String),
+    /// Webpage URL is indicated
+    Url(String),
 }
 
 impl Doc {
+    /// Unwrapps self as `Man` page
     pub fn as_man (&self) -> Option<&str> {
         match self {
             Doc::Man(s) => Some(&s),
+            _ => None,
+        }
+    }
+    /// Unwrapps self as webpage `Url` 
+    pub fn as_url (&self) -> Option<&str> {
+        match self {
+            Doc::Url(s) => Some(&s),
+            _ => None,
         }
     }
 }
@@ -221,10 +232,16 @@ impl std::str::FromStr for Doc {
         if items.len() != 2 {
             return Err(std::io::Error::new(ErrorKind::InvalidData, "malformed doc descriptor"))
         }
-        let content : Vec<&str> = items[1].split("(").collect();
         match items[0] {
             "man" => {
+                let content : Vec<&str> = items[1].split("(").collect();
                 Ok(Doc::Man(content[0].to_string()))
+            },
+            "http" => {
+                Ok(Doc::Url("http:".to_owned() + items[1].trim()))
+            },
+            "https" => {
+                Ok(Doc::Url("https:".to_owned() + items[1].trim()))
             },
             _ => {
                 Err(std::io::Error::new(ErrorKind::InvalidData, "unknown type of doc"))
@@ -232,8 +249,6 @@ impl std::str::FromStr for Doc {
         }
     }
 }
-                //LINE: "Docs: man:sshd(8)"
-                //LINE: "man:sshd_config(5)"
 
 /// Structure to describe a systemd `unit`
 #[derive(Clone, Debug)]

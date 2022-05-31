@@ -53,8 +53,14 @@ println!("active: {}", unit.active);
 println!("preset: {}", unit.preset);
 
 if let Some(docs) = unit.docs { // doc pages available
-    let page = docs[0].as_man();
-    `man {page}` exists
+    for doc in docs {
+        if let Some(page) = doc.as_man() {
+            // `man` page exists 
+        }
+        if let Some(url) = doc.as_url() {
+            // `url` is indicated
+        }
+    }
 }
 
 println!("auto_start (enabled): {}", unit.auto_start);
