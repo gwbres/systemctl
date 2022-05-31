@@ -277,7 +277,9 @@ pub struct Unit {
     pub pid: Option<u64>,
     /// Running task(s) infos
     pub tasks: Option<u64>,
-    /// Memory consumption infos
+    /// Optionnal CPU load consumption infos
+    pub cpu: Option<String>,
+    /// Optionnal Memory consumption infos
     pub memory: Option<String>,
     /// mounted partition (`What`), if this is a `mount`/`automount` unit
     pub mounted: Option<String>,
@@ -297,6 +299,7 @@ impl Default for Unit {
             script: Default::default(),
             pid: Default::default(),
             tasks: Default::default(),
+            cpu: Default::default(),
             memory: Default::default(),
             state: Default::default(),
             auto_start: Default::default(),
@@ -346,6 +349,7 @@ impl Unit {
         let mut auto_start : AutoStartStatus = AutoStartStatus::default();
         
         let mut preset: bool = false;
+        let mut cpu: Option<String> = None;
         let mut memory: Option<String> = None;
         let mut mounted: Option<String> = None;
         let mut mountpoint: Option<String> = None;
@@ -408,7 +412,12 @@ impl Unit {
 
             } else if line.starts_with("Memory: ") {
                 let line = line.split_at(8).1;
-                memory = Some(line.to_string())
+                memory = Some(line.trim().to_string())
+            
+            } else if line.starts_with("CPU: ") {
+                let line = line.split_at(5).1;
+                cpu = Some(line.trim().to_string())
+
             } else {
                 // handling multi line cases
                 if is_doc {
@@ -431,6 +440,7 @@ impl Unit {
             preset,
             active: is_active(name)?,
             tasks: Default::default(),
+            cpu,
             memory,
             mounted,
             mountpoint,
