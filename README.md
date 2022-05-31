@@ -19,8 +19,10 @@ systemctl::stop("systemd-journald.service")
 systemctl::restart("systemd-journald.service")
     .unwrap();
 
-let is_active = systemctl::is_active("ntpd")
-    .unwrap();
+if let Ok(true) = systemctl::exists("ntpd") {
+    let is_active = systemctl::is_active("ntpd")
+        .unwrap();
+}
 ```
 
 ## Service enumeration
