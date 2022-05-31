@@ -14,9 +14,13 @@ Small rust crate to interact with systemd units
 Nominal service operations:
 
 ```rust
-use systemctl;
-systemctl::stop("systemd-journald.service").unwrap();
-systemctl::restart("systemd-journald.service").unwrap();
+systemctl::stop("systemd-journald.service")
+    .unwrap();
+systemctl::restart("systemd-journald.service")
+    .unwrap();
+
+let is_active = systemctl::is_active("ntpd")
+    .unwrap();
 ```
 
 ## Service enumeration
