@@ -25,7 +25,7 @@ fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
     let exitcode = child.wait()?;
     //TODO improve this please
     //match exitcode.success() {
-    //    true => {
+        //true => {
             let mut stdout : Vec<u8> = Vec::new();
             if let Ok(size) = child.stdout.unwrap().read_to_end(&mut stdout) {
                 if size > 0 {
@@ -40,12 +40,12 @@ fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
             } else {
                 Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
             }
-        //},
-        /*false => {
+        /*},
+        false => {
             Err(Error::new(ErrorKind::Other,
                 format!("/usr/bin/systemctl {:?} failed", args)))
-        }*/
-    //}
+        }
+    }*/
 }
 
 /// Forces given `unit` (re)start
