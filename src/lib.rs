@@ -10,6 +10,7 @@ fn systemctl (args: Vec<&str>) -> std::io::Result<ExitStatus> {
     let mut child = std::process::Command::new("/usr/bin/systemctl")
         .args(args)
         .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
         .spawn()?;
     child.wait()
 }
@@ -19,6 +20,7 @@ fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
     let mut child = std::process::Command::new("/usr/bin/systemctl")
         .args(args.clone())
         .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
         .spawn()?;
     let exitcode = child.wait()?;
     //TODO improve this please
