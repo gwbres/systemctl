@@ -203,6 +203,14 @@ pub enum Doc {
     Man(String),
 }
 
+impl Doc {
+    pub fn as_man (&self) -> Option<&str> {
+        match self {
+            Doc::Man(s) => Some(&s),
+        }
+    }
+}
+
 impl std::str::FromStr for Doc {
     type Err = std::io::Error; 
     /// Builds `Doc` from systemd status descriptor

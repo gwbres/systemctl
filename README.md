@@ -51,6 +51,12 @@ let unit = systemctl::Unit::from_systemctl("sshd")
 unit.restart().unwrap();
 println!("active: {}", unit.active);
 println!("preset: {}", unit.preset);
+
+if let Some(docs) = unit.docs { // doc pages available
+    let page = docs[0].as_man();
+    `man {page}` exists
+}
+
 println!("auto_start (enabled): {}", unit.auto_start);
 println!("config script : {}", unit.script);
 println!("pid: {}", unit.pid);
