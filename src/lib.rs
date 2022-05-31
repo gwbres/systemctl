@@ -63,7 +63,15 @@ pub fn is_active (unit: &str) -> std::io::Result<bool> {
     Ok(status.trim_end().eq("active"))
 }
 
+/// Isolates given unit, only self and its dependencies are
+/// now actively running
 pub fn isolate (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["isolate", unit]) }
+
+/// Freezes (halts) given unit
+pub fn freeze (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["freeze", unit]) }
+
+/// Unfreezes given unit (recover from halted state)
+pub fn unfreeze (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["unfreeze", unit]) }
 
 /// Returns `true` if given `unit` exists,
 /// ie., service could be or is actively deployed
@@ -370,6 +378,16 @@ impl Unit {
     /// self and its dependencies
     pub fn isolate (&self) -> std::io::Result<ExitStatus> {
         isolate(&self.name)
+    }
+    /// `Freezes` Self, halts self and CPU load will
+    /// no longer be dedicated to its execution.
+    /// `unfreeze()` is the mirror operation
+    pub fn freeze (&self) -> std::io::Result<ExitStatus> {
+        freeze(&self.name)
+    }
+    /// `Unfreezes` Self, exists halted state
+    pub fn unfreeze (&self) -> std::io::Result<ExitStatus> {
+        unfreeze(&self.name)
     }
 }
 
