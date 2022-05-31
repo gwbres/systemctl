@@ -1,9 +1,9 @@
 //! systemctl: small crate to interact with services through systemctl
 //! Homepage: <https://github.com/gwbres/systemctl>
-use std::process::ExitStatus;
-use std::io::{Read, Error, ErrorKind};
 use std::str::FromStr;
+use std::process::ExitStatus;
 use strum_macros::EnumString;
+use std::io::{Read, Error, ErrorKind};
 
 /// calls systemctl $args
 fn systemctl (args: Vec<&str>) -> std::io::Result<ExitStatus> {
@@ -195,6 +195,36 @@ impl Default for Process {
     }
 }
 
+/// Doc describes types of documentation possibly
+/// available for a systemd `unit`
+#[derive(Clone, Debug)]
+pub enum Doc {
+    /// Man page is available
+    Man(String),
+}
+
+impl std::str::FromStr for Doc {
+    type Err = std::io::Error; 
+    /// Builds `Doc` from systemd status descriptor
+    fn from_str (status: &str) -> Result<Self, Self::Err> {
+        let items : Vec<&str> = status.split(":").collect();
+        if items.len() != 2 {
+            return Err(std::io::Error::new(ErrorKind::InvalidData, "malformed doc descriptor"))
+        }
+        let content : Vec<&str> = items[1].split("(").collect();
+        match items[0] {
+            "man" => {
+                Ok(Doc::Man(content[0].to_string()))
+            },
+            _ => {
+                Err(std::io::Error::new(ErrorKind::InvalidData, "unknown type of doc"))
+            }
+        }
+    }
+}
+                //LINE: "Docs: man:sshd(8)"
+                //LINE: "man:sshd_config(5)"
+
 /// Structure to describe a systemd `unit`
 #[derive(Clone, Debug)]
 pub struct Unit {
@@ -229,7 +259,7 @@ pub struct Unit {
     /// Mount point (`Where`), if this is a `mount`/`automount` unit
     pub mountpoint: Option<String>,
     /// Docs / `man` page(s) available for this unit
-    pub docs: Option<Vec<String>>,
+    pub docs: Option<Vec<Doc>>,
 }
 
 impl Default for Unit {
@@ -287,12 +317,16 @@ impl Unit {
         let mut pid : Option<u64> = None;
         let mut state: State = State::default();
         let mut auto_start : AutoStartStatus = AutoStartStatus::default();
+        
         let mut active: bool = false;
         let mut preset: bool = false;
         let mut memory: Option<String> = None;
         let mut mounted: Option<String> = None;
         let mut mountpoint: Option<String> = None;
-        let mut docs: Option<Vec<String>> = None;
+        
+        let mut docs: Vec<Doc> = Vec::with_capacity(3);
+        let mut is_doc : bool = false;
+
         for line in lines {
             let line = line.trim_start();
             if line.starts_with("Loaded:") {
@@ -316,8 +350,12 @@ impl Unit {
                 //LINE: "Active: active (running) since Fri 2022-03-04 08:29:34 CET; 1 months 8 days ago"
             
             } else if line.starts_with("Docs: ") {
-                //LINE: "Docs: man:sshd(8)"
-                //LINE: "man:sshd_config(5)"
+                is_doc = true;
+                let line = line.trim_start();
+                let (_, line) = line.split_at(6); // remove "Docs: "
+                if let Ok(doc) = Doc::from_str(line) {
+                    docs.push(doc)
+                }
             
             } else if line.starts_with("What: ") {
                 mounted = Some(line.split_at(6).1.trim().to_string());
@@ -342,6 +380,14 @@ impl Unit {
             } else if line.starts_with("Memory: ") {
                 let line = line.split_at(8).1;
                 memory = Some(line.to_string())
+            } else {
+                // handling multi line cases
+                if is_doc {
+                    let line = line.trim_start();
+                    if let Ok(doc) = Doc::from_str(line) {
+                        docs.push(doc)
+                    }
+                }
             }
         }
         Ok(Unit {
@@ -359,7 +405,13 @@ impl Unit {
             memory,
             mounted,
             mountpoint,
-            docs,
+            docs: {
+                if docs.len() > 0 {
+                    Some(docs)
+                } else {
+                    None
+                }
+            }
         })
     }
     /// Restarts Self by invocking `systemctl`
