@@ -63,6 +63,8 @@ pub fn is_active (unit: &str) -> std::io::Result<bool> {
     Ok(status.trim_end().eq("active"))
 }
 
+pub fn isolate (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["isolate", unit]) }
+
 /// Returns `true` if given `unit` exists,
 /// ie., service could be or is actively deployed
 /// and manageable by systemd
@@ -363,6 +365,11 @@ impl Unit {
     /// Returns `true` if Self is actively running
     pub fn is_active (&self) -> std::io::Result<bool> {
         is_active(&self.name)
+    }
+    /// `Isolate` Self, meaning stops all other units but
+    /// self and its dependencies
+    pub fn isolate (&self) -> std::io::Result<ExitStatus> {
+        isolate(&self.name)
     }
 }
 
