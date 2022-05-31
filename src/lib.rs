@@ -61,6 +61,14 @@ pub fn is_active (unit: &str) -> std::io::Result<bool> {
     Ok(status.trim_end().eq("active"))
 }
 
+/// Returns `true` if given `unit` exists,
+/// ie., service could be or is actively deployed
+/// and manageable by systemd
+pub fn exists (unit: &str) -> std::io::Result<bool> {
+    let status = status(unit); 
+    Ok(status.is_ok() && !status.unwrap().trim_end().eq(&format!("Unit {}.service could not be found.", unit)))
+}
+
 /// Returns list of units extracted from systemctl listing.   
 ///  + type filter: optionnal --type filter
 ///  + state filter: optionnal --state filter
@@ -367,6 +375,15 @@ mod test {
             let active = is_active(u);
             assert_eq!(active.is_ok(), true);
             println!("{} is-active: {:#?}", u, active);
+        }
+    }
+    #[test]
+    fn test_service_exists() {
+        let units = vec!["sshd","dropbear","ntpd","example","non-existing","dummy"];
+        for u in units {
+            let ex = exists(u);
+            assert_eq!(ex.is_ok(), true);
+            println!("{} exists: {:#?}", u, ex);
         }
     }
     #[test]
