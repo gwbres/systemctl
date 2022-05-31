@@ -71,7 +71,7 @@ pub fn isolate (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["iso
 pub fn freeze (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["freeze", unit]) }
 
 /// Unfreezes given unit (recover from halted state)
-pub fn unfreeze (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["unfreeze", unit]) }
+pub fn unfreeze (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["thaw", unit]) }
 
 /// Returns `true` if given `unit` exists,
 /// ie., service could be or is actively deployed
