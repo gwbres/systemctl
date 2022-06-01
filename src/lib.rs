@@ -57,6 +57,9 @@ pub fn stop (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["stop",
 /// Returns raw status from `systemctl status $unit` call
 pub fn status (unit: &str) -> std::io::Result<String> { systemctl_capture(vec!["status", unit]) }
 
+/// Invokes systemctl `cat` on given `unit`
+pub fn cat (unit: &str) -> std::io::Result<String> { systemctl_capture(vec!["cat", unit]) }
+
 /// Returns `true` if given `unit` is actively running
 pub fn is_active (unit: &str) -> std::io::Result<bool> {
     let status = systemctl_capture(vec!["is-active", unit])?;
@@ -271,6 +274,10 @@ pub struct Unit {
     pub preset: bool,
     /// Configuration script loaded when starting this unit
     pub script: String,
+    /// restart policy
+    pub restart_policy: Option<String>,
+    /// optionnal killmode info
+    pub kill_mode: Option<String>,
     /// Optionnal process description (main tasklet "name")
     pub process: Option<String>,
     /// Optionnal process ID number (main tasklet pid)
@@ -287,6 +294,22 @@ pub struct Unit {
     pub mountpoint: Option<String>,
     /// Docs / `man` page(s) available for this unit
     pub docs: Option<Vec<Doc>>,
+    /// wants attributes: list of other service / unit names
+    pub wants : Option<Vec<String>>,
+    /// wanted_by attributes: list of other service / unit names
+    pub wanted_by : Option<Vec<String>>,
+    /// also attributes
+    pub also: Option<Vec<String>>,
+    /// `before` attributes
+    pub before: Option<Vec<String>>,
+    /// `after` attributes
+    pub after: Option<Vec<String>>,
+    /// exec_start attribute: actual command line
+    /// to be exected on `start` requests
+    pub exec_start: Option<String>,
+    /// exec_reload attribute, actual command line
+    /// to be exected on `reload` requests
+    pub exec_reload: Option<String>,
 }
 
 impl Default for Unit {
@@ -309,6 +332,15 @@ impl Default for Unit {
             process: Default::default(),
             mounted: Default::default(),
             mountpoint: Default::default(),
+            wants: Default::default(),
+            wanted_by: Default::default(),
+            restart_policy: Default::default(),
+            kill_mode: Default::default(),
+            after: Default::default(),
+            before: Default::default(),
+            also: Default::default(),
+            exec_start: Default::default(),
+            exec_reload: Default::default(),
         }
     }
 }
@@ -356,6 +388,16 @@ impl Unit {
         
         let mut docs: Vec<Doc> = Vec::with_capacity(3);
         let mut is_doc : bool = false;
+
+        let mut wants: Vec<String> = Vec::new();
+        let mut wanted_by : Vec<String> = Vec::new();
+        let mut before : Vec<String> = Vec::new();
+        let mut after : Vec<String> = Vec::new();
+        let mut also : Vec<String> = Vec::new();
+        let mut exec_start = String::new();
+        let mut exec_reload = String::new();
+        let mut kill_mode = String::new();
+        let mut restart_policy = String::new();
 
         for line in lines {
             let line = line.trim_start();
@@ -428,6 +470,31 @@ impl Unit {
                 }
             }
         }
+
+        if let Ok(content) = cat(name) {
+            let lines = content.lines(); 
+            for line in lines {
+                if line.contains("=") {
+                    let items : Vec<&str> = line.split("=").collect();
+                    let key = items[0];
+                    let value = items[1].trim();
+                    println!("Key {} Value {}", key, value);
+                    match key {
+                        "Wants" => wants.push(value.to_string()),
+                        "WantedBy" => wanted_by.push(value.to_string()),
+                        "Also" => also.push(value.to_string()),
+                        "Before" => before.push(value.to_string()),
+                        "After" => after.push(value.to_string()),
+                        "ExecStart" => exec_start = value.to_string(),
+                        "ExecReload" => exec_reload = value.to_string(),
+                        "Restart" => restart_policy = value.to_string(),
+                        "KillMode" => kill_mode = value.to_string(),
+                        _ => {},
+                    }
+                }
+            }
+        }
+
         Ok(Unit {
             name: name.to_string(),
             description, 
@@ -437,6 +504,20 @@ impl Unit {
             pid,
             state,
             auto_start,
+            restart_policy: {
+                if restart_policy.len() > 0 {
+                    Some(restart_policy)
+                } else {
+                    None
+                }
+            },
+            kill_mode: {
+                if kill_mode.len() > 0 {
+                    Some(kill_mode)
+                } else {
+                    None
+                }
+            },
             preset,
             active: is_active(name)?,
             tasks: Default::default(),
@@ -450,7 +531,56 @@ impl Unit {
                 } else {
                     None
                 }
-            }
+            },
+            wants: {
+                if wants.len() > 0 {
+                    Some(wants)
+                } else {
+                    None
+                }
+            },
+            wanted_by: {
+                if wanted_by.len() > 0 {
+                    Some(wanted_by)
+                } else {
+                    None
+                }
+            },
+            before: {
+                if before.len() > 0 {
+                    Some(before)
+                } else {
+                    None
+                }
+            },
+            also: {
+                if also.len() > 0 {
+                    Some(also)
+                } else {
+                    None
+                }
+            },
+            after: {
+                if after.len() > 0 {
+                    Some(after)
+                } else {
+                    None
+                }
+            },
+            exec_start: {
+                if exec_start.len() > 0 {
+                    Some(exec_start)
+                } else {
+                    None
+                }
+            },
+            exec_reload: {
+                if exec_reload.len() > 0 {
+                    Some(exec_reload)
+                } else {
+                    None
+                }
+            },
         })
     }
     /// Restarts Self by invocking `systemctl`
