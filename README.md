@@ -9,6 +9,12 @@ Small rust crate to interact with systemd units
 [![Rust](https://github.com/gwbres/systemctl/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/gwbres/systemctl/actions/workflows/rust.yml)
 [![crates.io](https://docs.rs/systemctl/badge.svg)](https://docs.rs/systemctl/badge.svg)
 
+## Environment
+
+`SYSTEMCTL_PATH` custom env. variable describes the absolute
+location of `systemctl` binary, by default this crate uses `/usr/bin/systemctl`,
+but that can be customized.
+
 ## Unit / service operation
 
 Nominal service operations:
