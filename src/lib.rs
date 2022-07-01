@@ -1,4 +1,4 @@
-//! systemctl: small crate to interact with services through systemctl
+//! Crate to manage and monitor services through `systemctl`   
 //! Homepage: <https://github.com/gwbres/systemctl>
 use std::env;
 use std::str::FromStr;
@@ -25,7 +25,7 @@ fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
         .spawn()?;
     let _exitcode = child.wait()?;
     //TODO improve this please
-    //Interogating some services returns an error code
+    //Interrogating some services returns an error code
     //match exitcode.success() {
         //true => {
             let mut stdout : Vec<u8> = Vec::new();
