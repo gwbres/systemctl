@@ -13,7 +13,11 @@ Small rust crate to interact with systemd units
 
 `SYSTEMCTL_PATH` custom env. variable describes the absolute
 location path of `systemctl` binary, by default this crate uses `/usr/bin/systemctl`,
-but that can be customized.
+but that can be customized:
+
+```shell
+SYSTEMCTL_PATH=/home/$me/bin/systemctl cargo build
+```
 
 ## Unit / service operation
 
