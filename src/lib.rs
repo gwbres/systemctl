@@ -1,13 +1,14 @@
 //! systemctl: small crate to interact with services through systemctl
 //! Homepage: <https://github.com/gwbres/systemctl>
+use std::env;
 use std::str::FromStr;
 use std::process::ExitStatus;
 use strum_macros::EnumString;
 use std::io::{Read, Error, ErrorKind};
 
-/// calls systemctl $args
+/// Invokes `systemctl $args` silently
 fn systemctl (args: Vec<&str>) -> std::io::Result<ExitStatus> {
-    let mut child = std::process::Command::new("/usr/bin/systemctl")
+    let mut child = std::process::Command::new(env::var("SYSTEMCTL_PATH").unwrap())
         .args(args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
@@ -15,15 +16,16 @@ fn systemctl (args: Vec<&str>) -> std::io::Result<ExitStatus> {
     child.wait()
 }
 
-/// calls systemctl $args and captures stdout
+/// Invokes `systemctl $args` and captures stdout stream
 fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
-    let mut child = std::process::Command::new("/usr/bin/systemctl")
+    let mut child = std::process::Command::new(env::var("SYSTEMCTL_PATH").unwrap())
         .args(args.clone())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()?;
-    let exitcode = child.wait()?;
+    let _exitcode = child.wait()?;
     //TODO improve this please
+    //Interogating some services returns an error code
     //match exitcode.success() {
         //true => {
             let mut stdout : Vec<u8> = Vec::new();
@@ -48,7 +50,7 @@ fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
     }*/
 }
 
-/// Forces given `unit` (re)start
+/// Forces given `unit` to (re)start
 pub fn restart (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["restart", unit]) }
 
 /// Forces given `unit` to stop
@@ -176,6 +178,7 @@ impl Default for State {
     fn default() -> State { State::Masked }
 }
 
+/*
 /// Process
 #[derive(Clone, Debug)]
 pub struct Process {
@@ -198,7 +201,7 @@ impl Default for Process {
             status: Default::default(),
         }
     }
-}
+}*/
 
 /// Doc describes types of documentation possibly
 /// available for a systemd `unit`
@@ -402,11 +405,11 @@ impl Unit {
         for line in lines {
             let line = line.trim_start();
             if line.starts_with("Loaded:") {
-                let (_, line) = line.split_at(8); // "Loaded: "
+                let (_, line) = line.split_at(8); // Get rid of "Loaded: "
                 if line.starts_with("loaded") {
                     state = State::Loaded;
-                    let (_, rem) = line.split_at(1); // "("
-                    let (rem, _) = rem.split_at(rem.len()-1); // ")"
+                    let (_, rem) = line.split_at(1); // remove "("
+                    let (rem, _) = rem.split_at(rem.len()-1); // remove ")"
                     let items : Vec<_> = rem.split_terminator(";").collect();
                     script = items[0].trim().to_string();
                     auto_start = AutoStartStatus::from_str(items[1].trim()).unwrap();
@@ -419,6 +422,9 @@ impl Unit {
                 }
             
             } else if line.starts_with("Active: ") {
+                // skip that one
+                // we already have .active() .inative() methods 
+                // to access this information
             
             } else if line.starts_with("Docs: ") {
                 is_doc = true;
@@ -429,6 +435,7 @@ impl Unit {
             
             } else if line.starts_with("What: ") { // mountpoint infos
                 mounted = Some(line.split_at(6).1.trim().to_string());
+
             } else if line.starts_with("Where: ") { // mountpoint infos
                 mountpoint = Some(line.split_at(7).1.trim().to_string());
 
@@ -442,6 +449,7 @@ impl Unit {
                     .to_string())
             
             } else if line.starts_with("Process: ") {
+                //TODO: parse as a Process item 
                 //let items : Vec<_> = line.split_ascii_whitespace().collect();
                 //let proc_pid = u64::from_str_radix(items[1].trim(), 10).unwrap();
                 //let cli;
@@ -583,23 +591,28 @@ impl Unit {
             },
         })
     }
-    /// Restarts Self by invocking `systemctl`
+
+    /// Restarts Self by invoking `systemctl`
     pub fn restart (&self) -> std::io::Result<ExitStatus> {
         restart(&self.name)
     }
+    
     /// Returns verbose status for Self 
     pub fn status (&self) -> std::io::Result<String> {
         status(&self.name)
     }
+    
     /// Returns `true` if Self is actively running
     pub fn is_active (&self) -> std::io::Result<bool> {
         is_active(&self.name)
     }
+    
     /// `Isolate` Self, meaning stops all other units but
     /// self and its dependencies
     pub fn isolate (&self) -> std::io::Result<ExitStatus> {
         isolate(&self.name)
     }
+    
     /// `Freezes` Self, halts self and CPU load will
     /// no longer be dedicated to its execution.
     /// This operation might not be feasible.
@@ -607,6 +620,7 @@ impl Unit {
     pub fn freeze (&self) -> std::io::Result<ExitStatus> {
         freeze(&self.name)
     }
+    
     /// `Unfreezes` Self, exists halted state.
     /// This operation might not be feasible.
     pub fn unfreeze (&self) -> std::io::Result<ExitStatus> {

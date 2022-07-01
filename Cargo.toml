@@ -8,6 +8,9 @@ homepage = "https://github.com/gwbres/systemctl"
 edition = "2018"
 readme = "README.md"
 
+[env]
+SYSTEMCTL_PATH = { value = "/usr/bin/systemctl", relative = false }
+
 [dependencies]
 strum = "0.24.0"
 strum_macros = "0.24.0"
