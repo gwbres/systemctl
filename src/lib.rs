@@ -1,14 +1,16 @@
 //! Crate to manage and monitor services through `systemctl`   
 //! Homepage: <https://github.com/gwbres/systemctl>
-use std::env;
 use std::str::FromStr;
 use std::process::ExitStatus;
 use strum_macros::EnumString;
 use std::io::{Read, Error, ErrorKind};
 
+#[macro_use]
+extern crate default_env;
+
 /// Invokes `systemctl $args` silently
 fn systemctl (args: Vec<&str>) -> std::io::Result<ExitStatus> {
-    let mut child = std::process::Command::new(env::var("SYSTEMCTL_PATH").unwrap())
+    let mut child = std::process::Command::new(default_env!("SYSTEMCTL_PATH", "/usr/bin/systemctl"))
         .args(args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
@@ -18,7 +20,7 @@ fn systemctl (args: Vec<&str>) -> std::io::Result<ExitStatus> {
 
 /// Invokes `systemctl $args` and captures stdout stream
 fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
-    let mut child = std::process::Command::new(env::var("SYSTEMCTL_PATH").unwrap())
+    let mut child = std::process::Command::new(default_env!("SYSTEMCTL_PATH", "/usr/bin/systemctl"))
         .args(args.clone())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())

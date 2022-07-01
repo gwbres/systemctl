@@ -15,3 +15,4 @@ SYSTEMCTL_PATH = { value = "/usr/bin/systemctl", relative = false }
 strum = "0.24.0"
 strum_macros = "0.24.0"
 itertools = "0.10.3"
+default-env = "0.1"
