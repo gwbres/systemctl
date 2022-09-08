@@ -93,7 +93,7 @@ pub fn exists (unit: &str) -> std::io::Result<bool> {
 /// Returns list of units extracted from systemctl listing.   
 ///  + type filter: optionnal --type filter
 ///  + state filter: optionnal --state filter
-fn list_units (type_filter: Option<&str>, state_filter: Option<&str>) -> std::io::Result<Vec<String>> {
+pub fn list_units (type_filter: Option<&str>, state_filter: Option<&str>) -> std::io::Result<Vec<String>> {
     let mut args = vec!["list-unit-files"];
     if let Some(filter) = type_filter {
         args.push("--type");
