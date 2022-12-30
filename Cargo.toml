@@ -1,6 +1,6 @@
 [package]
 name = "systemctl"
-version = "0.1.8"
+version = "0.1.9"
 license = "MIT OR Apache-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Small crate to interact with systemd units"
