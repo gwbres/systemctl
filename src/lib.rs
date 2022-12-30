@@ -284,7 +284,7 @@ impl std::str::FromStr for Doc {
             "man" => {
                 let content: Vec<&str> = items[1].split("(").collect();
                 Ok(Doc::Man(content[0].to_string()))
-            }
+            },
             "http" => Ok(Doc::Url("http:".to_owned() + items[1].trim())),
             "https" => Ok(Doc::Url("https:".to_owned() + items[1].trim())),
             _ => Err(std::io::Error::new(
@@ -526,7 +526,7 @@ impl Unit {
                         "ExecReload" => exec_reload = value.to_string(),
                         "Restart" => restart_policy = value.to_string(),
                         "KillMode" => kill_mode = value.to_string(),
-                        _ => {}
+                        _ => {},
                     }
                 }
             }
