@@ -67,6 +67,21 @@ pub fn stop(unit: &str) -> std::io::Result<ExitStatus> {
     systemctl(vec!["stop", unit])
 }
 
+/// Starts given `unit`
+pub fn start(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["start", unit])
+}
+
+/// Triggers [reload command](https://www.freedesktop.org/software/systemd/man/systemd.service.html#ExecReload=) for given `unit`
+pub fn reload(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["reload", unit])
+}
+
+/// Enables given `unit`
+pub fn enable(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["enable", unit])
+}
+
 /// Returns raw status from `systemctl status $unit` call
 pub fn status(unit: &str) -> std::io::Result<String> {
     systemctl_capture(vec!["status", unit])
