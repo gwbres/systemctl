@@ -89,6 +89,16 @@ pub fn stop(unit: &str) -> std::io::Result<ExitStatus> {
     systemctl(vec!["stop", unit])
 }
 
+/// Triggers reload for given `unit`
+pub fn reload(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["reload", unit])
+}
+
+/// Triggers reload or restarts given `unit`
+pub fn reload_or_restart(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["reload-or-restart", unit])
+}
+
 /// Enable given `unit` to start at boot
 pub fn enable(unit: &str) -> std::io::Result<ExitStatus> {
     systemctl(vec!["enable", unit])
@@ -576,6 +586,16 @@ impl Unit {
     /// Stops Self by invoking `systemctl`
     pub fn stop(&self) -> std::io::Result<ExitStatus> {
         stop(&self.name)
+    }
+
+    /// Reloads Self by invoking systemctl
+    pub fn reload(&self) -> std::io::Result<ExitStatus> {
+        reload(&self.name)
+    }
+
+    /// Reloads or restarts Self by invoking systemctl
+    pub fn reload_or_restart(&self) -> std::io::Result<ExitStatus> {
+        reload_or_restart(&self.name)
     }
 
     /// Enable Self to start at boot
