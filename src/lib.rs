@@ -48,7 +48,7 @@ fn systemctl_capture(args: Vec<&str>) -> std::io::Result<String> {
         }
     } else {
         Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
-    }
+    } 
     /*},
         false => {
             Err(Error::new(ErrorKind::Other,
@@ -165,6 +165,11 @@ pub enum AutoStartStatus {
     Generated,
     #[strum(serialize = "indirect")]
     Indirect,
+    #[strum(serialize = "transient")]
+    Transient,
+    #[strum(serialize = "enabled-runtime")]
+    Enabled_runtime,
+
 }
 
 impl Default for AutoStartStatus {
@@ -194,6 +199,8 @@ pub enum Type {
     Path,
     #[strum(serialize = "target")]
     Target,
+    #[strum(serialize = "swap")]
+    Swap,
 }
 
 impl Default for Type {
@@ -414,6 +421,7 @@ impl Unit {
         let items: Vec<_> = name.split_terminator(".").collect();
         let name = items[0];
         // `type` is deduced from .extension
+        println!("{}",items[1]);
         let utype = Type::from_str(items[1].trim()).unwrap();
         let mut script: String = String::new();
 
@@ -452,6 +460,7 @@ impl Unit {
                     let (rem, _) = rem.split_at(rem.len() - 1); // remove ")"
                     let items: Vec<_> = rem.split_terminator(";").collect();
                     script = items[0].trim().to_string();
+
                     auto_start = AutoStartStatus::from_str(items[1].trim()).unwrap();
                     if items.len() > 2 {
                         // preset is optionnal ?
@@ -735,7 +744,7 @@ mod test {
                 //for now this is a quick fix to avoid that
                 //this problem needs to be looked in to in detail
                 continue;
-            }  
+            }
             
             let c0 = unit.chars().nth(0).unwrap();
             if c0.is_alphanumeric() {
