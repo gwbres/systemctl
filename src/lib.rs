@@ -154,22 +154,53 @@ pub fn list_enabled_services() -> std::io::Result<Vec<String>> {
 
 /// `AutoStartStatus` describes the Unit current state
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
-pub enum AutoStartStatus {
-    #[strum(serialize = "static")]
-    Static,
-    #[strum(serialize = "enabled")]
-    Enabled,
-    #[strum(serialize = "disabled")]
-    Disabled,
-    #[strum(serialize = "generated")]
-    Generated,
-    #[strum(serialize = "indirect")]
-    Indirect,
-    #[strum(serialize = "transient")]
-    Transient,
-    #[strum(serialize = "enabled-runtime")]
-    Enabled_runtime,
-
+pub enum Type {
+    #[strum(serialize = "automount")]
+    AutoMount,
+    #[strum(serialize = "mount")]
+    Mount,
+    #[strum(serialize = "service")]
+    Service,
+    #[strum(serialize = "scope")]
+    Scope,
+    #[strum(serialize = "socket")]
+    Socket,
+    #[strum(serialize = "slice")]
+    Slice,
+    #[strum(serialize = "timer")]
+    Timer,
+    #[strum(serialize = "path")]
+    Path,
+    #[strum(serialize = "target")]
+    Target,
+    #[strum(serialize = "swap")]
+    Swap,
+    #[strum(serialize = "aa-prompt-listener")]
+    AaPromptListener,
+    #[strum(serialize = "system-shutdown")]
+    SystemShutdown,
+    #[strum(serialize = "recovery-chooser-trigger")]
+    RecoveryChooserTrigger,
+    #[strum(serialize = "failure")]
+    Failure,
+    #[strum(serialize = "unmount")]
+    Unmount,
+    #[strum(serialize = "autoimport")]
+    AutoImport,
+    #[strum(serialize = "snap-repair")]
+    SnapRepair,
+    #[strum(serialize = "mounts-pre")]
+    MountsPre,
+    #[strum(serialize = "mounts-post")]
+    MountsPost,
+    #[strum(serialize = "mounts")]
+    Mounts,
+    #[strum(serialize = "seeded")]
+    Seeded,
+    #[strum(serialize = "apparmor")]
+    Apparmor,
+    #[strum(serialize = "core-fixup")]
+    CoreFixup,
 }
 
 impl Default for AutoStartStatus {
