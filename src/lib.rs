@@ -5,11 +5,10 @@ use std::process::ExitStatus;
 use std::str::FromStr;
 use strum_macros::EnumString;
 
-#[macro_use]
-extern crate default_env;
+
 
 /// Invokes `systemctl $args` silently
-fn systemctl(args: Vec<&str>) -> std::io::Result<ExitStatus> {
+fn _systemctl(args: Vec<&str>) -> std::io::Result<ExitStatus> {
     let mut child =
         std::process::Command::new(default_env!("SYSTEMCTL_PATH", "/usr/bin/systemctl"))
             .args(args)
@@ -58,13 +57,13 @@ fn systemctl_capture(args: Vec<&str>) -> std::io::Result<String> {
 }
 
 /// Forces given `unit` to (re)start
-pub fn restart(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["restart", unit])
+pub fn _restart(unit: &str) -> std::io::Result<ExitStatus> {
+    _systemctl(vec!["restart", unit])
 }
 
 /// Forces given `unit` to stop
-pub fn stop(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["stop", unit])
+pub fn _stop(unit: &str) -> std::io::Result<ExitStatus> {
+   _systemctl(vec!["stop", unit])
 }
 
 /// Returns raw status from `systemctl status $unit` call
@@ -85,20 +84,20 @@ pub fn is_active(unit: &str) -> std::io::Result<bool> {
 
 /// Isolates given unit, only self and its dependencies are
 /// now actively running
-pub fn isolate(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["isolate", unit])
+pub fn _isolate(unit: &str) -> std::io::Result<ExitStatus> {
+    _systemctl(vec!["isolate", unit])
 }
 
 /// Freezes (halts) given unit.
 /// This operation might not be feasible.
-pub fn freeze(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["freeze", unit])
+pub fn _freeze(unit: &str) -> std::io::Result<ExitStatus> {
+   _systemctl(vec!["freeze", unit])
 }
 
 /// Unfreezes given unit (recover from halted state).
 /// This operation might not be feasible.
-pub fn unfreeze(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["thaw", unit])
+pub fn _unfreeze(unit: &str) -> std::io::Result<ExitStatus> {
+    _systemctl(vec!["thaw", unit])
 }
 
 /// Returns `true` if given `unit` exists,
@@ -143,16 +142,57 @@ pub fn list_units(
 }
 
 /// Returns list of services that are currently declared as disabled
-pub fn list_disabled_services() -> std::io::Result<Vec<String>> {
+pub fn _list_disabled_services() -> std::io::Result<Vec<String>> {
     Ok(list_units(Some("service"), Some("disabled"))?)
 }
 
 /// Returns list of services that are currently declared as enabled
-pub fn list_enabled_services() -> std::io::Result<Vec<String>> {
+pub fn _list_enabled_services() -> std::io::Result<Vec<String>> {
     Ok(list_units(Some("service"), Some("enabled"))?)
 }
 
 /// `AutoStartStatus` describes the Unit current state
+#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
+pub enum AutoStartStatus {
+    #[strum(serialize = "static")]
+    Static,
+    #[strum(serialize = "enabled")]
+    Enabled,
+    #[strum(serialize = "disabled")]
+    Disabled,
+    #[strum(serialize = "generated")]
+    Generated,
+    #[strum(serialize = "indirect")]
+    Indirect,
+    #[strum(serialize = "transient")]
+    Transient,
+    #[strum(serialize = "enabled-runtime")]
+    EnabledRuntime,
+
+}
+
+impl ToString for AutoStartStatus{
+    fn to_string(&self) -> String {
+        match self {
+            AutoStartStatus::Static => "static".to_string(),
+            AutoStartStatus::Enabled => "enabled".to_string(),
+            AutoStartStatus::Disabled => "disabled".to_string(),
+            AutoStartStatus::Generated => "generated".to_string(),
+            AutoStartStatus::Indirect => "indirect".to_string(),
+            AutoStartStatus::Transient => "transient".to_string(),
+            AutoStartStatus::EnabledRuntime => "enabled-runtime".to_string(),
+        }
+    }
+}
+
+impl Default for AutoStartStatus {
+    fn default() -> AutoStartStatus {
+        AutoStartStatus::Disabled
+    }
+      
+}
+
+/// `Type` describes a Unit declaration Type in systemd
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
 pub enum Type {
     #[strum(serialize = "automount")]
@@ -203,37 +243,6 @@ pub enum Type {
     CoreFixup,
 }
 
-impl Default for AutoStartStatus {
-    fn default() -> AutoStartStatus {
-        AutoStartStatus::Disabled
-    }
-}
-
-/// `Type` describes a Unit declaration Type in systemd
-#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
-pub enum Type {
-    #[strum(serialize = "automount")]
-    AutoMount,
-    #[strum(serialize = "mount")]
-    Mount,
-    #[strum(serialize = "service")]
-    Service,
-    #[strum(serialize = "scope")]
-    Scope,
-    #[strum(serialize = "socket")]
-    Socket,
-    #[strum(serialize = "slice")]
-    Slice,
-    #[strum(serialize = "timer")]
-    Timer,
-    #[strum(serialize = "path")]
-    Path,
-    #[strum(serialize = "target")]
-    Target,
-    #[strum(serialize = "swap")]
-    Swap,
-}
-
 impl Default for Type {
     fn default() -> Type {
         Type::Service
@@ -255,30 +264,7 @@ impl Default for State {
     }
 }
 
-/*
-/// Process
-#[derive(Clone, Debug)]
-pub struct Process {
-    /// pid
-    pid: u64,
-    /// command line that was executed
-    command: String,
-    /// code
-    code: String,
-    /// status
-    status: String,
-}
 
-impl Default for Process {
-    fn default() -> Process {
-        Process {
-            pid: 0,
-            command: Default::default(),
-            code: Default::default(),
-            status: Default::default(),
-        }
-    }
-}*/
 
 /// Doc describes types of documentation possibly
 /// available for a systemd `unit`
@@ -292,14 +278,14 @@ pub enum Doc {
 
 impl Doc {
     /// Unwrapps self as `Man` page
-    pub fn as_man(&self) -> Option<&str> {
+    pub fn _as_man(&self) -> Option<&str> {
         match self {
             Doc::Man(s) => Some(&s),
             _ => None,
         }
     }
     /// Unwrapps self as webpage `Url`
-    pub fn as_url(&self) -> Option<&str> {
+    pub fn _as_url(&self) -> Option<&str> {
         match self {
             Doc::Url(s) => Some(&s),
             _ => None,
@@ -449,8 +435,8 @@ impl Unit {
                 description = Some(itertools::join(&items, " "));
             }
         }
+       
         let items: Vec<_> = name.split_terminator(".").collect();
-        let name = items[0];
         // `type` is deduced from .extension
         let utype = Type::from_str(items[1].trim()).unwrap();
         let mut script: String = String::new();
@@ -479,7 +465,7 @@ impl Unit {
         let mut exec_reload = String::new();
         let mut kill_mode = String::new();
         let mut restart_policy = String::new();
-
+        
         for line in lines {
             let line = line.trim_start();
             if line.starts_with("Loaded:") {
@@ -661,8 +647,8 @@ impl Unit {
     }
 
     /// Restarts Self by invoking `systemctl`
-    pub fn restart(&self) -> std::io::Result<ExitStatus> {
-        restart(&self.name)
+    pub fn _restart(&self) -> std::io::Result<ExitStatus> {
+        _restart(&self.name)
     }
 
     /// Returns verbose status for Self
@@ -671,28 +657,28 @@ impl Unit {
     }
 
     /// Returns `true` if Self is actively running
-    pub fn is_active(&self) -> std::io::Result<bool> {
+    pub fn _is_active(&self) -> std::io::Result<bool> {
         is_active(&self.name)
     }
 
     /// `Isolate` Self, meaning stops all other units but
     /// self and its dependencies
-    pub fn isolate(&self) -> std::io::Result<ExitStatus> {
-        isolate(&self.name)
+    pub fn _isolate(&self) -> std::io::Result<ExitStatus> {
+        _isolate(&self.name)
     }
 
     /// `Freezes` Self, halts self and CPU load will
     /// no longer be dedicated to its execution.
     /// This operation might not be feasible.
     /// `unfreeze()` is the mirror operation
-    pub fn freeze(&self) -> std::io::Result<ExitStatus> {
-        freeze(&self.name)
+    pub fn _freeze(&self) -> std::io::Result<ExitStatus> {
+        _freeze(&self.name)
     }
 
     /// `Unfreezes` Self, exists halted state.
     /// This operation might not be feasible.
-    pub fn unfreeze(&self) -> std::io::Result<ExitStatus> {
-        unfreeze(&self.name)
+    pub fn _unfreeze(&self) -> std::io::Result<ExitStatus> {
+        _unfreeze(&self.name)
     }
 }
 
@@ -734,12 +720,12 @@ mod test {
     }
     #[test]
     fn test_disabled_services() {
-        let services = list_disabled_services().unwrap();
+        let services = _list_disabled_services().unwrap();
         println!("disabled services: {:#?}", services)
     }
     #[test]
     fn test_enabled_services() {
-        let services = list_enabled_services().unwrap();
+        let services = _list_enabled_services().unwrap();
         println!("enabled services: {:#?}", services)
     }
     #[test]
