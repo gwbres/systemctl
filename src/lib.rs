@@ -2,6 +2,7 @@
 //! Homepage: <https://github.com/gwbres/systemctl>
 use std::io::{Error, ErrorKind, Read};
 use std::process::ExitStatus;
+use regex::Regex;
 use std::str::FromStr;
 use strum_macros::EnumString;
 
@@ -131,11 +132,13 @@ pub fn list_units(
     }
     let mut result: Vec<String> = Vec::new();
     let content = systemctl_capture(args)?;
-    let lines = content.lines();
-    for l in lines.skip(1) {
-        // header labels
-        let parsed: Vec<_> = l.split_ascii_whitespace().collect();
-        if parsed.len() == 2 {
+    let mut lines = content.lines();
+    let seperator = Regex::new("\\s{2,}").unwrap();
+    let header = lines.next().unwrap();
+    let header_len = seperator.split(header).count();
+    for l in lines.skip(1) { // header labels
+        let parsed : Vec<_> = l.split_ascii_whitespace().collect();
+        if parsed.len() == header_len {
             result.push(parsed[0].to_string())
         }
     }
