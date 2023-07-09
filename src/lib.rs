@@ -1,51 +1,56 @@
 //! Crate to manage and monitor services through `systemctl`   
 //! Homepage: <https://github.com/gwbres/systemctl>
-use std::str::FromStr;
+use std::io::{Error, ErrorKind, Read};
 use std::process::ExitStatus;
 use regex::Regex;
+use std::str::FromStr;
 use strum_macros::EnumString;
-use std::io::{Read, Error, ErrorKind};
 
 #[macro_use]
 extern crate default_env;
 
 /// Invokes `systemctl $args` silently
-fn systemctl (args: Vec<&str>) -> std::io::Result<ExitStatus> {
-    let mut child = std::process::Command::new(default_env!("SYSTEMCTL_PATH", "/usr/bin/systemctl"))
-        .args(args)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()?;
+fn systemctl(args: Vec<&str>) -> std::io::Result<ExitStatus> {
+    let mut child =
+        std::process::Command::new(default_env!("SYSTEMCTL_PATH", "/usr/bin/systemctl"))
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()?;
     child.wait()
 }
 
 /// Invokes `systemctl $args` and captures stdout stream
-fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
-    let mut child = std::process::Command::new(default_env!("SYSTEMCTL_PATH", "/usr/bin/systemctl"))
-        .args(args.clone())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()?;
+fn systemctl_capture(args: Vec<&str>) -> std::io::Result<String> {
+    let mut child =
+        std::process::Command::new(default_env!("SYSTEMCTL_PATH", "/usr/bin/systemctl"))
+            .args(args.clone())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()?;
     let _exitcode = child.wait()?;
     //TODO improve this please
     //Interrogating some services returns an error code
     //match exitcode.success() {
-        //true => {
-            let mut stdout : Vec<u8> = Vec::new();
-            if let Ok(size) = child.stdout.unwrap().read_to_end(&mut stdout) {
-                if size > 0 {
-                    if let Ok(s) = String::from_utf8(stdout) {
-                        Ok(s)
-                    } else {
-                        Err(Error::new(ErrorKind::InvalidData, "Invalid utf8 data in stdout"))
-                    }
-                } else {
-                    Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
-                }
+    //true => {
+    let mut stdout: Vec<u8> = Vec::new();
+    if let Ok(size) = child.stdout.unwrap().read_to_end(&mut stdout) {
+        if size > 0 {
+            if let Ok(s) = String::from_utf8(stdout) {
+                Ok(s)
             } else {
-                Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
+                Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "Invalid utf8 data in stdout",
+                ))
             }
-        /*},
+        } else {
+            Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
+        }
+    } else {
+        Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
+    }
+    /*},
         false => {
             Err(Error::new(ErrorKind::Other,
                 format!("/usr/bin/systemctl {:?} failed", args)))
@@ -54,47 +59,68 @@ fn systemctl_capture (args: Vec<&str>) -> std::io::Result<String> {
 }
 
 /// Forces given `unit` to (re)start
-pub fn restart (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["restart", unit]) }
+pub fn restart(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["restart", unit])
+}
 
 /// Forces given `unit` to stop
-pub fn stop (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["stop", unit]) }
+pub fn stop(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["stop", unit])
+}
 
 /// Returns raw status from `systemctl status $unit` call
-pub fn status (unit: &str) -> std::io::Result<String> { systemctl_capture(vec!["status", unit]) }
+pub fn status(unit: &str) -> std::io::Result<String> {
+    systemctl_capture(vec!["status", unit])
+}
 
 /// Invokes systemctl `cat` on given `unit`
-pub fn cat (unit: &str) -> std::io::Result<String> { systemctl_capture(vec!["cat", unit]) }
+pub fn cat(unit: &str) -> std::io::Result<String> {
+    systemctl_capture(vec!["cat", unit])
+}
 
 /// Returns `true` if given `unit` is actively running
-pub fn is_active (unit: &str) -> std::io::Result<bool> {
+pub fn is_active(unit: &str) -> std::io::Result<bool> {
     let status = systemctl_capture(vec!["is-active", unit])?;
     Ok(status.trim_end().eq("active"))
 }
 
 /// Isolates given unit, only self and its dependencies are
 /// now actively running
-pub fn isolate (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["isolate", unit]) }
+pub fn isolate(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["isolate", unit])
+}
 
 /// Freezes (halts) given unit.
 /// This operation might not be feasible.
-pub fn freeze (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["freeze", unit]) }
+pub fn freeze(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["freeze", unit])
+}
 
 /// Unfreezes given unit (recover from halted state).
 /// This operation might not be feasible.
-pub fn unfreeze (unit: &str) -> std::io::Result<ExitStatus> { systemctl(vec!["thaw", unit]) }
+pub fn unfreeze(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["thaw", unit])
+}
 
 /// Returns `true` if given `unit` exists,
 /// ie., service could be or is actively deployed
 /// and manageable by systemd
-pub fn exists (unit: &str) -> std::io::Result<bool> {
-    let status = status(unit); 
-    Ok(status.is_ok() && !status.unwrap().trim_end().eq(&format!("Unit {}.service could not be found.", unit)))
+pub fn exists(unit: &str) -> std::io::Result<bool> {
+    let status = status(unit);
+    Ok(status.is_ok()
+        && !status
+            .unwrap()
+            .trim_end()
+            .eq(&format!("Unit {}.service could not be found.", unit)))
 }
 
 /// Returns list of units extracted from systemctl listing.   
 ///  + type filter: optionnal --type filter
 ///  + state filter: optionnal --state filter
-pub fn list_units (type_filter: Option<&str>, state_filter: Option<&str>) -> std::io::Result<Vec<String>> {
+pub fn list_units(
+    type_filter: Option<&str>,
+    state_filter: Option<&str>,
+) -> std::io::Result<Vec<String>> {
     let mut args = vec!["list-unit-files"];
     if let Some(filter) = type_filter {
         args.push("--type");
@@ -104,7 +130,7 @@ pub fn list_units (type_filter: Option<&str>, state_filter: Option<&str>) -> std
         args.push("--state");
         args.push(filter)
     }
-    let mut result : Vec<String> = Vec::new();
+    let mut result: Vec<String> = Vec::new();
     let content = systemctl_capture(args)?;
     let mut lines = content.lines();
     let seperator = Regex::new("\\s{2,}").unwrap();
@@ -120,12 +146,16 @@ pub fn list_units (type_filter: Option<&str>, state_filter: Option<&str>) -> std
 }
 
 /// Returns list of services that are currently declared as disabled
-pub fn list_disabled_services() -> std::io::Result<Vec<String>> { Ok(list_units(Some("service"), Some("disabled"))?) }
+pub fn list_disabled_services() -> std::io::Result<Vec<String>> {
+    Ok(list_units(Some("service"), Some("disabled"))?)
+}
 
 /// Returns list of services that are currently declared as enabled
-pub fn list_enabled_services() -> std::io::Result<Vec<String>> { Ok(list_units(Some("service"), Some("enabled"))?) }
+pub fn list_enabled_services() -> std::io::Result<Vec<String>> {
+    Ok(list_units(Some("service"), Some("enabled"))?)
+}
 
-/// `AutoStartStatus` describes the Unit current state 
+/// `AutoStartStatus` describes the Unit current state
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
 pub enum AutoStartStatus {
     #[strum(serialize = "static")]
@@ -141,7 +171,9 @@ pub enum AutoStartStatus {
 }
 
 impl Default for AutoStartStatus {
-    fn default() -> AutoStartStatus { AutoStartStatus::Disabled }
+    fn default() -> AutoStartStatus {
+        AutoStartStatus::Disabled
+    }
 }
 
 /// `Type` describes a Unit declaration Type in systemd
@@ -168,10 +200,12 @@ pub enum Type {
 }
 
 impl Default for Type {
-    fn default() -> Type { Type::Service }
+    fn default() -> Type {
+        Type::Service
+    }
 }
 
-/// `State` describes a Unit current state 
+/// `State` describes a Unit current state
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
 pub enum State {
     #[strum(serialize = "masked")]
@@ -181,7 +215,9 @@ pub enum State {
 }
 
 impl Default for State {
-    fn default() -> State { State::Masked }
+    fn default() -> State {
+        State::Masked
+    }
 }
 
 /*
@@ -221,14 +257,14 @@ pub enum Doc {
 
 impl Doc {
     /// Unwrapps self as `Man` page
-    pub fn as_man (&self) -> Option<&str> {
+    pub fn as_man(&self) -> Option<&str> {
         match self {
             Doc::Man(s) => Some(&s),
             _ => None,
         }
     }
-    /// Unwrapps self as webpage `Url` 
-    pub fn as_url (&self) -> Option<&str> {
+    /// Unwrapps self as webpage `Url`
+    pub fn as_url(&self) -> Option<&str> {
         match self {
             Doc::Url(s) => Some(&s),
             _ => None,
@@ -237,27 +273,27 @@ impl Doc {
 }
 
 impl std::str::FromStr for Doc {
-    type Err = std::io::Error; 
+    type Err = std::io::Error;
     /// Builds `Doc` from systemd status descriptor
-    fn from_str (status: &str) -> Result<Self, Self::Err> {
-        let items : Vec<&str> = status.split(":").collect();
+    fn from_str(status: &str) -> Result<Self, Self::Err> {
+        let items: Vec<&str> = status.split(":").collect();
         if items.len() != 2 {
-            return Err(std::io::Error::new(ErrorKind::InvalidData, "malformed doc descriptor"))
+            return Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                "malformed doc descriptor",
+            ));
         }
         match items[0] {
             "man" => {
-                let content : Vec<&str> = items[1].split("(").collect();
+                let content: Vec<&str> = items[1].split("(").collect();
                 Ok(Doc::Man(content[0].to_string()))
             },
-            "http" => {
-                Ok(Doc::Url("http:".to_owned() + items[1].trim()))
-            },
-            "https" => {
-                Ok(Doc::Url("https:".to_owned() + items[1].trim()))
-            },
-            _ => {
-                Err(std::io::Error::new(ErrorKind::InvalidData, "unknown type of doc"))
-            }
+            "http" => Ok(Doc::Url("http:".to_owned() + items[1].trim())),
+            "https" => Ok(Doc::Url("https:".to_owned() + items[1].trim())),
+            _ => Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                "unknown type of doc",
+            )),
         }
     }
 }
@@ -278,7 +314,7 @@ pub struct Unit {
     /// `true` if Self is actively running
     pub active: bool,
     /// `true` if this unit is auto started by default,
-    /// meaning, it should be manually disabled 
+    /// meaning, it should be manually disabled
     /// not to automatically start
     pub preset: bool,
     /// Configuration script loaded when starting this unit
@@ -304,9 +340,9 @@ pub struct Unit {
     /// Docs / `man` page(s) available for this unit
     pub docs: Option<Vec<Doc>>,
     /// wants attributes: list of other service / unit names
-    pub wants : Option<Vec<String>>,
+    pub wants: Option<Vec<String>>,
     /// wanted_by attributes: list of other service / unit names
-    pub wanted_by : Option<Vec<String>>,
+    pub wanted_by: Option<Vec<String>>,
     /// also attributes
     pub also: Option<Vec<String>>,
     /// `before` attributes
@@ -325,7 +361,7 @@ impl Default for Unit {
     /// Builds a default `Unit` structure
     fn default() -> Unit {
         Unit {
-            name: Default::default(), 
+            name: Default::default(),
             utype: Default::default(),
             description: Default::default(),
             script: Default::default(),
@@ -355,54 +391,55 @@ impl Default for Unit {
 }
 
 impl Unit {
-    /// Builds a new `Unit` structure by retrieving 
+    /// Builds a new `Unit` structure by retrieving
     /// structure attributes with a `systemctl status $unit` call
-    pub fn from_systemctl (name: &str) -> std::io::Result<Unit> {
+    pub fn from_systemctl(name: &str) -> std::io::Result<Unit> {
         if let Ok(false) = exists(name) {
-            return Err(
-                Error::new(
-                    ErrorKind::InvalidData, format!("Unit or service \"{}\" does not exist", name)))
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("Unit or service \"{}\" does not exist", name),
+            ));
         }
         let status = status(name)?;
         let mut lines = status.lines();
         let next = lines.next().unwrap();
-        let (_, rem) = next.split_at(3); 
+        let (_, rem) = next.split_at(3);
         let mut items = rem.split_ascii_whitespace();
         let name = items.next().unwrap().trim();
-        let mut description : Option<String> = None;
+        let mut description: Option<String> = None;
         if let Some(delim) = items.next() {
             if delim.trim().eq("-") {
                 // --> description string is provided
-                let items : Vec<_> = items.collect();
+                let items: Vec<_> = items.collect();
                 description = Some(itertools::join(&items, " "));
             }
         }
-        let items : Vec<_> = name.split_terminator(".").collect();
-        let name = items[0]; 
+        let items: Vec<_> = name.split_terminator(".").collect();
+        let name = items[0];
         // `type` is deduced from .extension
-        let utype = Type::from_str(items[1].trim()).unwrap(); 
+        let utype = Type::from_str(items[1].trim()).unwrap();
         let mut script: String = String::new();
-        
-        let mut pid : Option<u64> = None;
+
+        let mut pid: Option<u64> = None;
         let mut process: Option<String> = None;
-        
+
         let mut state: State = State::default();
-        let mut auto_start : AutoStartStatus = AutoStartStatus::default();
-        
+        let mut auto_start: AutoStartStatus = AutoStartStatus::default();
+
         let mut preset: bool = false;
         let mut cpu: Option<String> = None;
         let mut memory: Option<String> = None;
         let mut mounted: Option<String> = None;
         let mut mountpoint: Option<String> = None;
-        
+
         let mut docs: Vec<Doc> = Vec::with_capacity(3);
-        let mut is_doc : bool = false;
+        let mut is_doc: bool = false;
 
         let mut wants: Vec<String> = Vec::new();
-        let mut wanted_by : Vec<String> = Vec::new();
-        let mut before : Vec<String> = Vec::new();
-        let mut after : Vec<String> = Vec::new();
-        let mut also : Vec<String> = Vec::new();
+        let mut wanted_by: Vec<String> = Vec::new();
+        let mut before: Vec<String> = Vec::new();
+        let mut after: Vec<String> = Vec::new();
+        let mut also: Vec<String> = Vec::new();
         let mut exec_start = String::new();
         let mut exec_reload = String::new();
         let mut kill_mode = String::new();
@@ -415,65 +452,54 @@ impl Unit {
                 if line.starts_with("loaded") {
                     state = State::Loaded;
                     let (_, rem) = line.split_at(1); // remove "("
-                    let (rem, _) = rem.split_at(rem.len()-1); // remove ")"
-                    let items : Vec<_> = rem.split_terminator(";").collect();
+                    let (rem, _) = rem.split_at(rem.len() - 1); // remove ")"
+                    let items: Vec<_> = rem.split_terminator(";").collect();
                     script = items[0].trim().to_string();
                     auto_start = AutoStartStatus::from_str(items[1].trim()).unwrap();
                     if items.len() > 2 {
                         // preset is optionnal ?
-                        preset = items[2].trim().ends_with("enabled") 
+                        preset = items[2].trim().ends_with("enabled")
                     }
                 } else if line.starts_with("masked") {
                     state = State::Masked;
                 }
-            
             } else if line.starts_with("Active: ") {
                 // skip that one
-                // we already have .active() .inative() methods 
+                // we already have .active() .inative() methods
                 // to access this information
-            
             } else if line.starts_with("Docs: ") {
                 is_doc = true;
                 let (_, line) = line.split_at(6); // remove "Docs: "
                 if let Ok(doc) = Doc::from_str(line) {
                     docs.push(doc)
                 }
-            
-            } else if line.starts_with("What: ") { // mountpoint infos
+            } else if line.starts_with("What: ") {
+                // mountpoint infos
                 mounted = Some(line.split_at(6).1.trim().to_string());
-
-            } else if line.starts_with("Where: ") { // mountpoint infos
+            } else if line.starts_with("Where: ") {
+                // mountpoint infos
                 mountpoint = Some(line.split_at(7).1.trim().to_string());
-
             } else if line.starts_with("Main PID: ") {
                 // Main PID: 787 (gpm)
-                let items : Vec<&str> = line.split_ascii_whitespace().collect();
+                let items: Vec<&str> = line.split_ascii_whitespace().collect();
                 pid = Some(u64::from_str_radix(items[2].trim(), 10).unwrap());
-                process = Some(items[3]
-                    .replace(")", "")
-                    .replace("(","")
-                    .to_string())
-            
+                process = Some(items[3].replace(")", "").replace("(", "").to_string())
             } else if line.starts_with("Process: ") {
-                //TODO: parse as a Process item 
+                //TODO: parse as a Process item
                 //let items : Vec<_> = line.split_ascii_whitespace().collect();
                 //let proc_pid = u64::from_str_radix(items[1].trim(), 10).unwrap();
                 //let cli;
                 //Process: 640 ExecStartPre=/usr/sbin/sshd -t (code=exited, status=0/SUCCESS)
-
             } else if line.starts_with("CGroup: ") {
                 //LINE: "CGroup: /system.slice/sshd.service"
                 //LINE: "└─1050 /usr/sbin/sshd -D"
             } else if line.starts_with("Tasks: ") {
-
             } else if line.starts_with("Memory: ") {
                 let line = line.split_at(8).1;
                 memory = Some(line.trim().to_string())
-            
             } else if line.starts_with("CPU: ") {
                 let line = line.split_at(5).1;
                 cpu = Some(line.trim().to_string())
-
             } else {
                 // handling multi line cases
                 if is_doc {
@@ -486,13 +512,13 @@ impl Unit {
         }
 
         if let Ok(content) = cat(name) {
-            let lines = content.lines(); 
+            let lines = content.lines();
             for line in lines {
                 if line.contains("=") {
-                    let items : Vec<&str> = line.split("=").collect();
+                    let items: Vec<&str> = line.split("=").collect();
                     let key = items[0];
                     let value = items[1].trim();
-                    println!("Key {} Value {}", key, value);
+                    // println!("Key {} Value {}", key, value);
                     match key {
                         "Wants" => wants.push(value.to_string()),
                         "WantedBy" => wanted_by.push(value.to_string()),
@@ -511,9 +537,9 @@ impl Unit {
 
         Ok(Unit {
             name: name.to_string(),
-            description, 
+            description,
             script,
-            utype, 
+            utype,
             process,
             pid,
             state,
@@ -599,37 +625,37 @@ impl Unit {
     }
 
     /// Restarts Self by invoking `systemctl`
-    pub fn restart (&self) -> std::io::Result<ExitStatus> {
+    pub fn restart(&self) -> std::io::Result<ExitStatus> {
         restart(&self.name)
     }
-    
-    /// Returns verbose status for Self 
-    pub fn status (&self) -> std::io::Result<String> {
+
+    /// Returns verbose status for Self
+    pub fn status(&self) -> std::io::Result<String> {
         status(&self.name)
     }
-    
+
     /// Returns `true` if Self is actively running
-    pub fn is_active (&self) -> std::io::Result<bool> {
+    pub fn is_active(&self) -> std::io::Result<bool> {
         is_active(&self.name)
     }
-    
+
     /// `Isolate` Self, meaning stops all other units but
     /// self and its dependencies
-    pub fn isolate (&self) -> std::io::Result<ExitStatus> {
+    pub fn isolate(&self) -> std::io::Result<ExitStatus> {
         isolate(&self.name)
     }
-    
+
     /// `Freezes` Self, halts self and CPU load will
     /// no longer be dedicated to its execution.
     /// This operation might not be feasible.
     /// `unfreeze()` is the mirror operation
-    pub fn freeze (&self) -> std::io::Result<ExitStatus> {
+    pub fn freeze(&self) -> std::io::Result<ExitStatus> {
         freeze(&self.name)
     }
-    
+
     /// `Unfreezes` Self, exists halted state.
     /// This operation might not be feasible.
-    pub fn unfreeze (&self) -> std::io::Result<ExitStatus> {
+    pub fn unfreeze(&self) -> std::io::Result<ExitStatus> {
         unfreeze(&self.name)
     }
 }
@@ -645,7 +671,7 @@ mod test {
     }
     #[test]
     fn test_is_active() {
-        let units = vec!["sshd","dropbear","ntpd"];
+        let units = vec!["sshd", "dropbear", "ntpd"];
         for u in units {
             let active = is_active(u);
             assert_eq!(active.is_ok(), true);
@@ -654,7 +680,14 @@ mod test {
     }
     #[test]
     fn test_service_exists() {
-        let units = vec!["sshd","dropbear","ntpd","example","non-existing","dummy"];
+        let units = vec![
+            "sshd",
+            "dropbear",
+            "ntpd",
+            "example",
+            "non-existing",
+            "dummy",
+        ];
         for u in units {
             let ex = exists(u);
             assert_eq!(ex.is_ok(), true);
@@ -684,10 +717,11 @@ mod test {
             if unit.contains("@") {
                 // not testing this one
                 // would require @x service # identification / enumeration
-                continue
+                continue;
             }
             let c0 = unit.chars().nth(0).unwrap();
-            if c0.is_alphanumeric() { // valid unit name --> run test
+            if c0.is_alphanumeric() {
+                // valid unit name --> run test
                 let u = Unit::from_systemctl(&unit).unwrap();
                 println!("####################################");
                 println!("Unit: {:#?}", u);
