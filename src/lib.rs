@@ -163,6 +163,8 @@ pub enum AutoStartStatus {
     Static,
     #[strum(serialize = "enabled")]
     Enabled,
+    #[strum(serialize = "enabled-runtime")]
+    EnabledRuntime,
     #[strum(serialize = "disabled")]
     #[default]
     Disabled,
