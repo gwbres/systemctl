@@ -116,11 +116,11 @@ pub fn exists(unit: &str) -> std::io::Result<bool> {
 ///  + type filter: optional --type filter
 ///  + state filter: optional --state filter
 ///  + glob filter: optional for unit name
-pub fn list_units(
+pub fn list_units_full(
     type_filter: Option<&str>,
     state_filter: Option<&str>,
     glob: Option<&str>,
-) -> std::io::Result<Vec<String>> {
+) -> std::io::Result<Vec<SmallUnitList>> {
     let mut args = vec!["list-unit-files"];
     if let Some(filter) = type_filter {
         args.push("--type");
@@ -133,17 +133,45 @@ pub fn list_units(
     if let Some(glob) = glob {
         args.push(glob)
     }
-    let mut result: Vec<String> = Vec::new();
     let content = systemctl_capture(args)?;
-    let lines = content.lines();
-    for line in lines.skip(1) {
-        // header labels
+    let lines = content
+        .lines()
+        .filter(|line| line.contains('.') && !line.ends_with('.'));
+
+    let mut res_vec: Vec<SmallUnitList> = Vec::new();
+
+    for line in lines {
         let parsed: Vec<&str> = line.split_ascii_whitespace().collect();
-        if parsed.len() == 3 {
-            result.push(parsed[0].to_string())
-        }
+        let vendor_preset = match parsed[2] {
+            "-" => None,
+            "enabled" => Some(true),
+            "disabled" => Some(false),
+            _ => Some(false),
+        };
+        res_vec.push(SmallUnitList {
+            unit_file: parsed[0].to_string(),
+            state: parsed[1].to_string(),
+            vendor_preset,
+        })
     }
-    Ok(result)
+
+    Ok(res_vec)
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SmallUnitList {
+    unit_file: String,
+    state: String,
+    vendor_preset: Option<bool>,
+}
+
+pub fn list_units(
+    type_filter: Option<&str>,
+    state_filter: Option<&str>,
+    glob: Option<&str>,
+) -> std::io::Result<Vec<String>> {
+    let list = list_units_full(type_filter, state_filter, glob);
+    Ok(list?.iter().map(|n| n.unit_file.clone()).collect())
 }
 
 /// Returns list of services that are currently declared as disabled
@@ -407,7 +435,9 @@ impl Unit {
                     u.state = State::Masked;
                 }
             } else if let Some(line) = line.strip_prefix("Transient: ") {
-                if line == "yes" {u.transient = true}
+                if line == "yes" {
+                    u.transient = true
+                }
             } else if line.starts_with("Active: ") {
                 // skip that one
                 // we already have .active() .inative() methods
