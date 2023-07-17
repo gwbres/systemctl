@@ -107,9 +107,9 @@ pub fn unfreeze(unit: &str) -> std::io::Result<ExitStatus> {
 pub fn exists(unit: &str) -> std::io::Result<bool> {
     let unit_list = match list_units(None, None, Some(unit)) {
         Ok(l) => l,
-        Err(e) => return Err(e)
+        Err(e) => return Err(e),
     };
-    Ok(!unit_list.is_empty()) 
+    Ok(!unit_list.is_empty())
 }
 
 /// Returns list of units extracted from systemctl listing.   
@@ -119,7 +119,7 @@ pub fn exists(unit: &str) -> std::io::Result<bool> {
 pub fn list_units(
     type_filter: Option<&str>,
     state_filter: Option<&str>,
-    glob: Option<&str>
+    glob: Option<&str>,
 ) -> std::io::Result<Vec<String>> {
     let mut args = vec!["list-unit-files"];
     if let Some(filter) = type_filter {
@@ -172,6 +172,8 @@ pub enum AutoStartStatus {
     Generated,
     #[strum(serialize = "indirect")]
     Indirect,
+    #[strum(serialize = "transient")]
+    Transient,
 }
 
 /// `Type` describes a Unit declaration Type in systemd
@@ -343,6 +345,10 @@ pub struct Unit {
     /// exec_reload attribute, actual command line
     /// to be exected on `reload` requests
     pub exec_reload: Option<String>,
+    /// If a command is run as transient service unit, it will be started and managed
+    /// by the service manager like any other service, and thus shows up in the output
+    /// of systemctl list-units like any other unit.
+    pub transient: bool,
 }
 
 impl Unit {
@@ -388,7 +394,10 @@ impl Unit {
                     u.script = items[0].trim().to_string();
                     u.auto_start = match AutoStartStatus::from_str(items[1].trim()) {
                         Ok(x) => x,
-                        Err(e) => {println!("lol: {:?} -> {e}", items[1].trim()); AutoStartStatus::Disabled}
+                        Err(e) => {
+                            println!("lol: {:?} -> {e}", items[1].trim());
+                            AutoStartStatus::Disabled
+                        },
                     };
                     if items.len() > 2 {
                         // preset is optionnal ?
@@ -397,6 +406,8 @@ impl Unit {
                 } else if line.starts_with("masked") {
                     u.state = State::Masked;
                 }
+            } else if let Some(line) = line.strip_prefix("Transient: ") {
+                if line == "yes" {u.transient = true}
             } else if line.starts_with("Active: ") {
                 // skip that one
                 // we already have .active() .inative() methods
@@ -433,8 +444,8 @@ impl Unit {
                 //Process: 640 ExecStartPre=/usr/sbin/sshd -t (code=exited, status=0/SUCCESS)
             } else if line.starts_with("CGroup: ") {
                 //TODO: implement
-                              //LINE: "CGroup: /system.slice/sshd.service"
-                              //LINE: "└─1050 /usr/sbin/sshd -D"
+                //LINE: "CGroup: /system.slice/sshd.service"
+                //LINE: "└─1050 /usr/sbin/sshd -D"
             } else if line.starts_with("Tasks: ") {
                 //TODO: implement
             } else if let Some(line) = line.strip_prefix("Memory: ") {
@@ -580,7 +591,10 @@ mod test {
                 // valid unit name --> run test
                 let u = match Unit::from_systemctl(&unit) {
                     Ok(x) => x,
-                    Err(e) => {println!("Could not parse {unit} -> {e}"); continue}
+                    Err(e) => {
+                        println!("Could not parse {unit} -> {e}");
+                        continue;
+                    },
                 };
                 println!("####################################");
                 println!("Unit: {:#?}", u);
