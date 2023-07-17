@@ -161,9 +161,9 @@ pub fn list_units_full(
 #[derive(Clone, Debug, Default)]
 #[allow(dead_code)]
 pub struct SmallUnitList {
-    unit_file: String,
-    state: String,
-    vendor_preset: Option<bool>,
+    pub unit_file: String,
+    pub state: String,
+    pub vendor_preset: Option<bool>,
 }
 
 pub fn list_units(
