@@ -144,22 +144,23 @@ pub fn list_units(
 
 /// Returns list of services that are currently declared as disabled
 pub fn list_disabled_services() -> std::io::Result<Vec<String>> {
-    Ok(list_units(Some("service"), Some("disabled"))?)
+    list_units(Some("service"), Some("disabled"))
 }
 
 /// Returns list of services that are currently declared as enabled
 pub fn list_enabled_services() -> std::io::Result<Vec<String>> {
-    Ok(list_units(Some("service"), Some("enabled"))?)
+    list_units(Some("service"), Some("enabled"))
 }
 
 /// `AutoStartStatus` describes the Unit current state
-#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
 pub enum AutoStartStatus {
     #[strum(serialize = "static")]
     Static,
     #[strum(serialize = "enabled")]
     Enabled,
     #[strum(serialize = "disabled")]
+    #[default]
     Disabled,
     #[strum(serialize = "generated")]
     Generated,
@@ -167,20 +168,15 @@ pub enum AutoStartStatus {
     Indirect,
 }
 
-impl Default for AutoStartStatus {
-    fn default() -> AutoStartStatus {
-        AutoStartStatus::Disabled
-    }
-}
-
 /// `Type` describes a Unit declaration Type in systemd
-#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
 pub enum Type {
     #[strum(serialize = "automount")]
     AutoMount,
     #[strum(serialize = "mount")]
     Mount,
     #[strum(serialize = "service")]
+    #[default]
     Service,
     #[strum(serialize = "scope")]
     Scope,
@@ -196,25 +192,14 @@ pub enum Type {
     Target,
 }
 
-impl Default for Type {
-    fn default() -> Type {
-        Type::Service
-    }
-}
-
 /// `State` describes a Unit current state
-#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
 pub enum State {
     #[strum(serialize = "masked")]
+    #[default]
     Masked,
     #[strum(serialize = "loaded")]
     Loaded,
-}
-
-impl Default for State {
-    fn default() -> State {
-        State::Masked
-    }
 }
 
 /*
@@ -256,14 +241,14 @@ impl Doc {
     /// Unwrapps self as `Man` page
     pub fn as_man(&self) -> Option<&str> {
         match self {
-            Doc::Man(s) => Some(&s),
+            Doc::Man(s) => Some(s),
             _ => None,
         }
     }
     /// Unwrapps self as webpage `Url`
     pub fn as_url(&self) -> Option<&str> {
         match self {
-            Doc::Url(s) => Some(&s),
+            Doc::Url(s) => Some(s),
             _ => None,
         }
     }
@@ -273,7 +258,7 @@ impl std::str::FromStr for Doc {
     type Err = std::io::Error;
     /// Builds `Doc` from systemd status descriptor
     fn from_str(status: &str) -> Result<Self, Self::Err> {
-        let items: Vec<&str> = status.split(":").collect();
+        let items: Vec<&str> = status.split(':').collect();
         if items.len() != 2 {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidData,
@@ -282,7 +267,7 @@ impl std::str::FromStr for Doc {
         }
         match items[0] {
             "man" => {
-                let content: Vec<&str> = items[1].split("(").collect();
+                let content: Vec<&str> = items[1].split('(').collect();
                 Ok(Doc::Man(content[0].to_string()))
             },
             "http" => Ok(Doc::Url("http:".to_owned() + items[1].trim())),
@@ -296,7 +281,7 @@ impl std::str::FromStr for Doc {
 }
 
 /// Structure to describe a systemd `unit`
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Unit {
     /// Unit name
     pub name: String,
@@ -354,39 +339,6 @@ pub struct Unit {
     pub exec_reload: Option<String>,
 }
 
-impl Default for Unit {
-    /// Builds a default `Unit` structure
-    fn default() -> Unit {
-        Unit {
-            name: Default::default(),
-            utype: Default::default(),
-            description: Default::default(),
-            script: Default::default(),
-            pid: Default::default(),
-            tasks: Default::default(),
-            cpu: Default::default(),
-            memory: Default::default(),
-            state: Default::default(),
-            auto_start: Default::default(),
-            preset: Default::default(),
-            active: Default::default(),
-            docs: Default::default(),
-            process: Default::default(),
-            mounted: Default::default(),
-            mountpoint: Default::default(),
-            wants: Default::default(),
-            wanted_by: Default::default(),
-            restart_policy: Default::default(),
-            kill_mode: Default::default(),
-            after: Default::default(),
-            before: Default::default(),
-            also: Default::default(),
-            exec_start: Default::default(),
-            exec_reload: Default::default(),
-        }
-    }
-}
-
 impl Unit {
     /// Builds a new `Unit` structure by retrieving
     /// structure attributes with a `systemctl status $unit` call
@@ -397,106 +349,89 @@ impl Unit {
                 format!("Unit or service \"{}\" does not exist", name),
             ));
         }
+        let mut u = Unit::default();
         let status = status(name)?;
         let mut lines = status.lines();
         let next = lines.next().unwrap();
         let (_, rem) = next.split_at(3);
         let mut items = rem.split_ascii_whitespace();
         let name = items.next().unwrap().trim();
-        let mut description: Option<String> = None;
         if let Some(delim) = items.next() {
             if delim.trim().eq("-") {
                 // --> description string is provided
                 let items: Vec<_> = items.collect();
-                description = Some(itertools::join(&items, " "));
+                u.description = Some(itertools::join(&items, " "));
             }
         }
-        let items: Vec<_> = name.split_terminator(".").collect();
+        let items: Vec<_> = name.split_terminator('.').collect();
         let name = items[0];
+
         // `type` is deduced from .extension
-        let utype = Type::from_str(items[1].trim()).unwrap();
-        let mut script: String = String::new();
-
-        let mut pid: Option<u64> = None;
-        let mut process: Option<String> = None;
-
-        let mut state: State = State::default();
-        let mut auto_start: AutoStartStatus = AutoStartStatus::default();
-
-        let mut preset: bool = false;
-        let mut cpu: Option<String> = None;
-        let mut memory: Option<String> = None;
-        let mut mounted: Option<String> = None;
-        let mut mountpoint: Option<String> = None;
-
+        u.utype = Type::from_str(items[1].trim()).unwrap();
         let mut docs: Vec<Doc> = Vec::with_capacity(3);
-        let mut is_doc: bool = false;
-
-        let mut wants: Vec<String> = Vec::new();
-        let mut wanted_by: Vec<String> = Vec::new();
-        let mut before: Vec<String> = Vec::new();
-        let mut after: Vec<String> = Vec::new();
-        let mut also: Vec<String> = Vec::new();
-        let mut exec_start = String::new();
-        let mut exec_reload = String::new();
-        let mut kill_mode = String::new();
-        let mut restart_policy = String::new();
-
+        let mut is_doc = false;
         for line in lines {
             let line = line.trim_start();
-            if line.starts_with("Loaded:") {
-                let (_, line) = line.split_at(8); // Get rid of "Loaded: "
-                if line.starts_with("loaded") {
-                    state = State::Loaded;
-                    let (_, rem) = line.split_at(1); // remove "("
-                    let (rem, _) = rem.split_at(rem.len() - 1); // remove ")"
-                    let items: Vec<_> = rem.split_terminator(";").collect();
-                    script = items[0].trim().to_string();
-                    auto_start = AutoStartStatus::from_str(items[1].trim()).unwrap();
+            if let Some(line) = line.strip_prefix("Loaded: ") {
+                // Match and get rid of "Loaded: "
+                if let Some(line) = line.strip_prefix("loaded ") {
+                    u.state = State::Loaded;
+                    let line = line.strip_prefix('(').unwrap();
+                    let line = line.strip_suffix(')').unwrap();
+                    let items: Vec<&str> = line.split(';').collect();
+                    u.script = items[0].trim().to_string();
+                    u.auto_start = AutoStartStatus::from_str(items[1].trim()).unwrap();
                     if items.len() > 2 {
                         // preset is optionnal ?
-                        preset = items[2].trim().ends_with("enabled")
+                        u.preset = items[2].trim().ends_with("enabled");
                     }
                 } else if line.starts_with("masked") {
-                    state = State::Masked;
+                    u.state = State::Masked;
                 }
             } else if line.starts_with("Active: ") {
                 // skip that one
                 // we already have .active() .inative() methods
                 // to access this information
-            } else if line.starts_with("Docs: ") {
+            } else if let Some(line) = line.strip_prefix("Docs: ") {
                 is_doc = true;
-                let (_, line) = line.split_at(6); // remove "Docs: "
                 if let Ok(doc) = Doc::from_str(line) {
                     docs.push(doc)
                 }
-            } else if line.starts_with("What: ") {
+            } else if let Some(line) = line.strip_prefix("What: ") {
                 // mountpoint infos
-                mounted = Some(line.split_at(6).1.trim().to_string());
-            } else if line.starts_with("Where: ") {
+                u.mounted = Some(line.to_string())
+            } else if let Some(line) = line.strip_prefix("Where: ") {
                 // mountpoint infos
-                mountpoint = Some(line.split_at(7).1.trim().to_string());
-            } else if line.starts_with("Main PID: ") {
-                // Main PID: 787 (gpm)
-                let items: Vec<&str> = line.split_ascii_whitespace().collect();
-                pid = Some(u64::from_str_radix(items[2].trim(), 10).unwrap());
-                process = Some(items[3].replace(")", "").replace("(", "").to_string())
+                u.mountpoint = Some(line.to_string());
+            } else if let Some(line) = line.strip_prefix("Main PID: ") {
+                // example -> Main PID: 787 (gpm)
+                if let Some((pid, proc)) = line.split_once(' ') {
+                    u.pid = Some(pid.parse::<u64>().unwrap_or(0));
+                    u.process = Some(proc.replace(&['(', ')'][..], ""));
+                };
+            } else if let Some(line) = line.strip_prefix("Cntrl PID: ") {
+                // example -> Main PID: 787 (gpm)
+                if let Some((pid, proc)) = line.split_once(' ') {
+                    u.pid = Some(pid.parse::<u64>().unwrap_or(0));
+                    u.process = Some(proc.replace(&['(', ')'][..], ""));
+                };
             } else if line.starts_with("Process: ") {
+                todo!() //TODO: implement
                 //TODO: parse as a Process item
                 //let items : Vec<_> = line.split_ascii_whitespace().collect();
                 //let proc_pid = u64::from_str_radix(items[1].trim(), 10).unwrap();
                 //let cli;
                 //Process: 640 ExecStartPre=/usr/sbin/sshd -t (code=exited, status=0/SUCCESS)
             } else if line.starts_with("CGroup: ") {
+                todo!() //TODO: implement
                 //LINE: "CGroup: /system.slice/sshd.service"
                 //LINE: "└─1050 /usr/sbin/sshd -D"
             } else if line.starts_with("Tasks: ") {
-            } else if line.starts_with("Memory: ") {
-                let line = line.split_at(8).1;
-                memory = Some(line.trim().to_string())
-            } else if line.starts_with("CPU: ") {
-                let line = line.split_at(5).1;
-                cpu = Some(line.trim().to_string())
+                todo!() //TODO: implement
+            } else if let Some(line) = line.strip_prefix("Memory: ") {
+                u.memory = Some(line.trim().to_string());
+            } else if let Some(line) = line.strip_prefix("CPU: ") {
+                u.cpu = Some(line.trim().to_string())
             } else {
                 // handling multi line cases
                 if is_doc {
@@ -509,116 +444,28 @@ impl Unit {
         }
 
         if let Ok(content) = cat(name) {
-            let lines = content.lines();
-            for line in lines {
-                if line.contains("=") {
-                    let items: Vec<&str> = line.split("=").collect();
-                    let key = items[0];
-                    let value = items[1].trim();
-                    // println!("Key {} Value {}", key, value);
-                    match key {
-                        "Wants" => wants.push(value.to_string()),
-                        "WantedBy" => wanted_by.push(value.to_string()),
-                        "Also" => also.push(value.to_string()),
-                        "Before" => before.push(value.to_string()),
-                        "After" => after.push(value.to_string()),
-                        "ExecStart" => exec_start = value.to_string(),
-                        "ExecReload" => exec_reload = value.to_string(),
-                        "Restart" => restart_policy = value.to_string(),
-                        "KillMode" => kill_mode = value.to_string(),
-                        _ => {},
-                    }
+            let line_tuple = content.lines().filter_map(|line| line.split_once('=').to_owned());
+            for (k, v) in line_tuple {
+                let val = v.to_string();
+                match k {
+                    "Wants" => u.wants.get_or_insert_with(Vec::new).push(val),
+                    "WantedBy" => u.wanted_by.get_or_insert_with(Vec::new).push(val),
+                    "Also" => u.also.get_or_insert_with(Vec::new).push(val),
+                    "Before" => u.before.get_or_insert_with(Vec::new).push(val),
+                    "After" => u.after.get_or_insert_with(Vec::new).push(val),
+                    "ExecStart" => u.exec_start = Some(val),
+                    "ExecReload" => u.exec_reload = Some(val),
+                    "Restart" => u.restart_policy = Some(val),
+                    "KillMode" => u.kill_mode = Some(val),
+                    _ => {},
                 }
+                // }
             }
         }
 
-        Ok(Unit {
-            name: name.to_string(),
-            description,
-            script,
-            utype,
-            process,
-            pid,
-            state,
-            auto_start,
-            restart_policy: {
-                if restart_policy.len() > 0 {
-                    Some(restart_policy)
-                } else {
-                    None
-                }
-            },
-            kill_mode: {
-                if kill_mode.len() > 0 {
-                    Some(kill_mode)
-                } else {
-                    None
-                }
-            },
-            preset,
-            active: is_active(name)?,
-            tasks: Default::default(),
-            cpu,
-            memory,
-            mounted,
-            mountpoint,
-            docs: {
-                if docs.len() > 0 {
-                    Some(docs)
-                } else {
-                    None
-                }
-            },
-            wants: {
-                if wants.len() > 0 {
-                    Some(wants)
-                } else {
-                    None
-                }
-            },
-            wanted_by: {
-                if wanted_by.len() > 0 {
-                    Some(wanted_by)
-                } else {
-                    None
-                }
-            },
-            before: {
-                if before.len() > 0 {
-                    Some(before)
-                } else {
-                    None
-                }
-            },
-            also: {
-                if also.len() > 0 {
-                    Some(also)
-                } else {
-                    None
-                }
-            },
-            after: {
-                if after.len() > 0 {
-                    Some(after)
-                } else {
-                    None
-                }
-            },
-            exec_start: {
-                if exec_start.len() > 0 {
-                    Some(exec_start)
-                } else {
-                    None
-                }
-            },
-            exec_reload: {
-                if exec_reload.len() > 0 {
-                    Some(exec_reload)
-                } else {
-                    None
-                }
-            },
-        })
+        u.active = is_active(name)?;
+        u.name = name.to_string();
+        Ok(u)
     }
 
     /// Restarts Self by invoking `systemctl`
