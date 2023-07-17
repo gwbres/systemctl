@@ -28,7 +28,7 @@ fn systemctl_capture(args: Vec<&str>) -> std::io::Result<String> {
             .stderr(std::process::Stdio::null())
             .spawn()?;
     let _exitcode = child.wait()?;
-    //TODO improve this please
+    //TODO: improve this please
     //Interrogating some services returns an error code
     //match exitcode.success() {
     //true => {
@@ -114,8 +114,8 @@ pub fn exists(unit: &str) -> std::io::Result<bool> {
 }
 
 /// Returns list of units extracted from systemctl listing.   
-///  + type filter: optionnal --type filter
-///  + state filter: optionnal --state filter
+///  + type filter: optional --type filter
+///  + state filter: optional --state filter
 pub fn list_units(
     type_filter: Option<&str>,
     state_filter: Option<&str>,
@@ -132,10 +132,10 @@ pub fn list_units(
     let mut result: Vec<String> = Vec::new();
     let content = systemctl_capture(args)?;
     let lines = content.lines();
-    for l in lines.skip(1) {
+    for line in lines.skip(1) {
         // header labels
-        let parsed: Vec<_> = l.split_ascii_whitespace().collect();
-        if parsed.len() == 2 {
+        let parsed: Vec<&str> = line.split_ascii_whitespace().collect();
+        if parsed.len() == 3 {
             result.push(parsed[0].to_string())
         }
     }
@@ -417,15 +417,15 @@ impl Unit {
                 };
             } else if line.starts_with("Process: ") {
                 todo!() //TODO: implement
-                //TODO: parse as a Process item
-                //let items : Vec<_> = line.split_ascii_whitespace().collect();
-                //let proc_pid = u64::from_str_radix(items[1].trim(), 10).unwrap();
-                //let cli;
-                //Process: 640 ExecStartPre=/usr/sbin/sshd -t (code=exited, status=0/SUCCESS)
+                        //TODO: parse as a Process item
+                        //let items : Vec<_> = line.split_ascii_whitespace().collect();
+                        //let proc_pid = u64::from_str_radix(items[1].trim(), 10).unwrap();
+                        //let cli;
+                        //Process: 640 ExecStartPre=/usr/sbin/sshd -t (code=exited, status=0/SUCCESS)
             } else if line.starts_with("CGroup: ") {
                 todo!() //TODO: implement
-                //LINE: "CGroup: /system.slice/sshd.service"
-                //LINE: "└─1050 /usr/sbin/sshd -D"
+                        //LINE: "CGroup: /system.slice/sshd.service"
+                        //LINE: "└─1050 /usr/sbin/sshd -D"
             } else if line.starts_with("Tasks: ") {
                 todo!() //TODO: implement
             } else if let Some(line) = line.strip_prefix("Memory: ") {
@@ -444,7 +444,9 @@ impl Unit {
         }
 
         if let Ok(content) = cat(name) {
-            let line_tuple = content.lines().filter_map(|line| line.split_once('=').to_owned());
+            let line_tuple = content
+                .lines()
+                .filter_map(|line| line.split_once('=').to_owned());
             for (k, v) in line_tuple {
                 let val = v.to_string();
                 match k {
@@ -510,7 +512,7 @@ mod test {
     #[test]
     fn test_status() {
         let status = status("sshd");
-        assert_eq!(status.is_ok(), true);
+        assert!(status.is_ok());
         println!("sshd status : {:#?}", status)
     }
     #[test]
@@ -518,7 +520,7 @@ mod test {
         let units = vec!["sshd", "dropbear", "ntpd"];
         for u in units {
             let active = is_active(u);
-            assert_eq!(active.is_ok(), true);
+            assert!(active.is_ok());
             println!("{} is-active: {:#?}", u, active);
         }
     }
@@ -534,7 +536,7 @@ mod test {
         ];
         for u in units {
             let ex = exists(u);
-            assert_eq!(ex.is_ok(), true);
+            assert!(ex.is_ok());
             println!("{} exists: {:#?}", u, ex);
         }
     }
@@ -563,6 +565,7 @@ mod test {
                 // would require @x service # identification / enumeration
                 continue;
             }
+            println!("{unit}");
             let c0 = unit.chars().nth(0).unwrap();
             if c0.is_alphanumeric() {
                 // valid unit name --> run test
