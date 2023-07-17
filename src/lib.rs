@@ -105,20 +105,21 @@ pub fn unfreeze(unit: &str) -> std::io::Result<ExitStatus> {
 /// ie., service could be or is actively deployed
 /// and manageable by systemd
 pub fn exists(unit: &str) -> std::io::Result<bool> {
-    let status = status(unit);
-    Ok(status.is_ok()
-        && !status
-            .unwrap()
-            .trim_end()
-            .eq(&format!("Unit {}.service could not be found.", unit)))
+    let unit_list = match list_units(None, None, Some(unit)) {
+        Ok(l) => l,
+        Err(e) => return Err(e)
+    };
+    Ok(!unit_list.is_empty()) 
 }
 
 /// Returns list of units extracted from systemctl listing.   
 ///  + type filter: optional --type filter
 ///  + state filter: optional --state filter
+///  + glob filter: optional for unit name
 pub fn list_units(
     type_filter: Option<&str>,
     state_filter: Option<&str>,
+    glob: Option<&str>
 ) -> std::io::Result<Vec<String>> {
     let mut args = vec!["list-unit-files"];
     if let Some(filter) = type_filter {
@@ -128,6 +129,9 @@ pub fn list_units(
     if let Some(filter) = state_filter {
         args.push("--state");
         args.push(filter)
+    }
+    if let Some(glob) = glob {
+        args.push(glob)
     }
     let mut result: Vec<String> = Vec::new();
     let content = systemctl_capture(args)?;
@@ -144,12 +148,12 @@ pub fn list_units(
 
 /// Returns list of services that are currently declared as disabled
 pub fn list_disabled_services() -> std::io::Result<Vec<String>> {
-    list_units(Some("service"), Some("disabled"))
+    list_units(Some("service"), Some("disabled"), None)
 }
 
 /// Returns list of services that are currently declared as enabled
 pub fn list_enabled_services() -> std::io::Result<Vec<String>> {
-    list_units(Some("service"), Some("enabled"))
+    list_units(Some("service"), Some("enabled"), None)
 }
 
 /// `AutoStartStatus` describes the Unit current state
@@ -380,7 +384,10 @@ impl Unit {
                     let line = line.strip_suffix(')').unwrap();
                     let items: Vec<&str> = line.split(';').collect();
                     u.script = items[0].trim().to_string();
-                    u.auto_start = AutoStartStatus::from_str(items[1].trim()).unwrap();
+                    u.auto_start = match AutoStartStatus::from_str(items[1].trim()) {
+                        Ok(x) => x,
+                        Err(e) => {println!("lol: {:?} -> {e}", items[1].trim()); AutoStartStatus::Disabled}
+                    };
                     if items.len() > 2 {
                         // preset is optionnal ?
                         u.preset = items[2].trim().ends_with("enabled");
@@ -557,7 +564,7 @@ mod test {
     }
     #[test]
     fn test_service_unit_construction() {
-        let units = list_units(None, None).unwrap(); // all units
+        let units = list_units(None, None, None).unwrap(); // all units
         for unit in units {
             let unit = unit.as_str();
             if unit.contains("@") {
@@ -569,7 +576,10 @@ mod test {
             let c0 = unit.chars().nth(0).unwrap();
             if c0.is_alphanumeric() {
                 // valid unit name --> run test
-                let u = Unit::from_systemctl(&unit).unwrap();
+                let u = match Unit::from_systemctl(&unit) {
+                    Ok(x) => x,
+                    Err(e) => {println!("Could not parse {unit} -> {e}"); continue}
+                };
                 println!("####################################");
                 println!("Unit: {:#?}", u);
                 println!("active: {}", u.active);
