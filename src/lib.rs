@@ -159,6 +159,7 @@ pub fn list_units_full(
 }
 
 #[derive(Clone, Debug, Default)]
+#[allow(dead_code)]
 pub struct SmallUnitList {
     unit_file: String,
     state: String,
@@ -379,6 +380,8 @@ pub struct Unit {
     pub transient: bool,
 }
 
+// TODO: Remove this lint fix
+#[allow(clippy::if_same_then_else)]
 impl Unit {
     /// Builds a new `Unit` structure by retrieving
     /// structure attributes with a `systemctl status $unit` call
@@ -637,6 +640,17 @@ mod test {
                 println!("Memory consumption: {:?}", u.memory);
                 println!("####################################")
             }
+        }
+    }
+    #[test]
+    fn test_unit_list() {
+        let units = list_units_full(None, None, None).unwrap(); // all units
+        for unit in units {
+            println!("####################################");
+            println!("Unit: {}", unit.unit_file);
+            println!("State: {}", unit.state);
+            println!("Vendor Preset: {:?}", unit.vendor_preset);
+            println!("####################################");
         }
     }
 }
