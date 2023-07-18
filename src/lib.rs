@@ -406,7 +406,7 @@ impl Unit {
         let next = lines.next().unwrap();
         let (_, rem) = next.split_at(3);
         let mut items = rem.split_ascii_whitespace();
-        let name = items.next().unwrap().trim();
+        let name_raw = items.next().unwrap().trim();
         if let Some(delim) = items.next() {
             if delim.trim().eq("-") {
                 // --> description string is provided
@@ -414,13 +414,12 @@ impl Unit {
                 u.description = Some(itertools::join(&items, " "));
             }
         }
-        let items: Vec<_> = name.split_terminator('.').collect();
-        let name = items[0];
+        let (name, utype_raw) = name_raw.rsplit_once('.').unwrap_or((name_raw, ""));
 
         // `type` is deduced from .extension
-        u.utype = match Type::from_str(items[1].trim()) {
+        u.utype = match Type::from_str(utype_raw) {
             Ok(t) => t,
-            Err(e) => panic!("For {:?} -> {e}", items),
+            Err(e) => panic!("For {:?} -> {e}", name_raw),
         };
         let mut docs: Vec<Doc> = Vec::with_capacity(3);
         let mut is_doc = false;
