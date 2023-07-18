@@ -623,17 +623,10 @@ mod test {
                 // would require @x service # identification / enumeration
                 continue;
             }
-            println!("{unit}");
             let c0 = unit.chars().nth(0).unwrap();
             if c0.is_alphanumeric() {
                 // valid unit name --> run test
-                let u = match Unit::from_systemctl(&unit) {
-                    Ok(x) => x,
-                    Err(e) => {
-                        println!("Could not parse {unit} -> {e}");
-                        continue;
-                    },
-                };
+                let u = Unit::from_systemctl(&unit).unwrap();
                 println!("####################################");
                 println!("Unit: {:#?}", u);
                 println!("active: {}", u.active);
