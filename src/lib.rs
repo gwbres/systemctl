@@ -1,61 +1,72 @@
 //! Crate to manage and monitor services through `systemctl`   
 //! Homepage: <https://github.com/gwbres/systemctl>
 use std::io::{Error, ErrorKind, Read};
-use std::process::ExitStatus;
+use std::process::{Child, ExitStatus};
 use std::str::FromStr;
 use strum_macros::EnumString;
 
 const SYSTEMCTL_PATH: &str = "/usr/bin/systemctl";
 
+/// Invokes `systemctl $args`
+fn spawn_child(args: Vec<&str>) -> std::io::Result<Child> {
+    std::process::Command::new(std::env::var("SYSTEMCTL_PATH").unwrap_or(SYSTEMCTL_PATH.into()))
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+}
+
 /// Invokes `systemctl $args` silently
 fn systemctl(args: Vec<&str>) -> std::io::Result<ExitStatus> {
-    let mut child = std::process::Command::new(
-        std::env::var("SYSTEMCTL_PATH").unwrap_or(SYSTEMCTL_PATH.into()),
-    )
-    .args(args)
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::null())
-    .spawn()?;
-    child.wait()
+    spawn_child(args)?.wait()
 }
 
 /// Invokes `systemctl $args` and captures stdout stream
 fn systemctl_capture(args: Vec<&str>) -> std::io::Result<String> {
-    let mut child = std::process::Command::new(
-        std::env::var("SYSTEMCTL_PATH").unwrap_or(SYSTEMCTL_PATH.into()),
-    )
-    .args(args.clone())
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::null())
-    .spawn()?;
-    let _exitcode = child.wait()?;
-    //TODO: improve this please
-    //Interrogating some services returns an error code
-    //match exitcode.success() {
-    //true => {
-    let mut stdout: Vec<u8> = Vec::new();
-    if let Ok(size) = child.stdout.unwrap().read_to_end(&mut stdout) {
-        if size > 0 {
-            if let Ok(s) = String::from_utf8(stdout) {
-                Ok(s)
-            } else {
-                Err(Error::new(
-                    ErrorKind::InvalidData,
-                    "Invalid utf8 data in stdout",
-                ))
-            }
-        } else {
-            Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
-        }
-    } else {
-        Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
+    let mut child = spawn_child(args)?;
+    match child.wait()?.code() {
+        Some(code) if code == 0 => {}, // success
+        Some(code) if code == 4 => {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                "Unit not found in systemctl list",
+            ))
+        },
+        // unknown errorcodes
+        Some(code) => {
+            return Err(Error::new(
+                // TODO: Maybe a better ErrorKind, none really seem to fit
+                ErrorKind::Other,
+                format!("Process exited with code: {code}"),
+            ));
+        },
+        None => {
+            return Err(Error::new(
+                ErrorKind::Interrupted,
+                "Process terminated by signal",
+            ))
+        },
     }
-    /*},
-        false => {
-            Err(Error::new(ErrorKind::Other,
-                format!("/usr/bin/systemctl {:?} failed", args)))
+
+    let mut stdout: Vec<u8> = Vec::new();
+    let size = child.stdout.unwrap().read_to_end(&mut stdout)?;
+
+    if size > 0 {
+        if let Ok(s) = String::from_utf8(stdout) {
+            return Ok(s);
+        } else {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Invalid utf8 data in stdout",
+            ));
         }
-    }*/
+    }
+
+    // if this is reached all if's above did not work
+    Err(Error::new(
+        ErrorKind::UnexpectedEof,
+        "systemctl stdout empty",
+    ))
 }
 
 /// Forces given `unit` to (re)start
@@ -573,16 +584,16 @@ mod test {
     #[test]
     fn test_status() {
         let status = status("sshd");
+        println!("sshd status : {:#?}", status);
         assert!(status.is_ok());
-        println!("sshd status : {:#?}", status)
     }
     #[test]
     fn test_is_active() {
         let units = vec!["sshd", "dropbear", "ntpd"];
         for u in units {
             let active = is_active(u);
-            assert!(active.is_ok());
             println!("{} is-active: {:#?}", u, active);
+            assert!(active.is_ok());
         }
     }
     #[test]
@@ -597,8 +608,8 @@ mod test {
         ];
         for u in units {
             let ex = exists(u);
-            assert!(ex.is_ok());
             println!("{} exists: {:#?}", u, ex);
+            assert!(ex.is_ok());
         }
     }
     #[test]
@@ -616,6 +627,21 @@ mod test {
         let unit = Unit::from_systemctl("non-existing");
         assert_eq!(unit.is_err(), true);
     }
+
+    #[test]
+    fn test_systemctl_exitcode_success() {
+        let u = Unit::from_systemctl("cron.service");
+        println!("{:#?}", u);
+        assert!(u.is_ok());
+    }
+
+    #[test]
+    fn test_systemctl_exitcode_not_found() {
+        let u = Unit::from_systemctl("cran.service");
+        println!("{:#?}", u);
+        assert!(u.is_err());
+    }
+
     #[test]
     fn test_service_unit_construction() {
         let units = list_units(None, None, None).unwrap(); // all units
