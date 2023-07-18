@@ -332,7 +332,7 @@ pub struct Unit {
     pub name: String,
     /// Unit type
     pub utype: Type,
-    /// Optionnal unit description
+    /// Optional unit description
     pub description: Option<String>,
     /// Current state
     pub state: State,
@@ -420,7 +420,7 @@ impl Unit {
         // `type` is deduced from .extension
         u.utype = match Type::from_str(items[1].trim()) {
             Ok(t) => t,
-            Err(e) => panic!("For {} -> {e}", items[1].trim()),
+            Err(e) => panic!("For {:?} -> {e}", items),
         };
         let mut docs: Vec<Doc> = Vec::with_capacity(3);
         let mut is_doc = false;
