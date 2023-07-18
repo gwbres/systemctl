@@ -1,29 +1,33 @@
-name: Rust
-
+name: pr
 on:
+  workflow_dispatch:
+  pull_request:
   push:
-
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   build:
+    permissions: write-all
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Setup 
-      uses: actions-rs/toolchain@v1
+    - uses: actions/checkout@v3
       with:
-        toolchain: stable
-        override: true
-        components: rustfmt, clippy 
-    - name: Build
-      run: cargo build
-    - name: Test
-      run: cargo test -- --nocapture
-    - name: Build (all features)
-      run: cargo build --all-features
-    - name: Test (all features)
-      run: cargo test --all-features -- --nocapture
-    - name: Coding style
+        submodules: 'true'
+    - uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          ~/.rustup
+          /usr/local/cargo
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    - name: Install Rust
+      run: rustup update stable
+    - name: Run rustfmt
       run: cargo fmt --all -- --check
+    - name: Run clippy
+      run: cargo clippy --all -- -D warnings
+    - uses: taiki-e/install-action@nextest
+    - name: Cargo Test
+      run: cargo nextest run
