@@ -5,28 +5,29 @@ use std::process::ExitStatus;
 use std::str::FromStr;
 use strum_macros::EnumString;
 
-#[macro_use]
-extern crate default_env;
+const SYSTEMCTL_PATH: &str = "/usr/bin/systemctl";
 
 /// Invokes `systemctl $args` silently
 fn systemctl(args: Vec<&str>) -> std::io::Result<ExitStatus> {
-    let mut child =
-        std::process::Command::new(default_env!("SYSTEMCTL_PATH", "/usr/bin/systemctl"))
-            .args(args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn()?;
+    let mut child = std::process::Command::new(
+        std::env::var("SYSTEMCTL_PATH").unwrap_or(SYSTEMCTL_PATH.into()),
+    )
+    .args(args)
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::null())
+    .spawn()?;
     child.wait()
 }
 
 /// Invokes `systemctl $args` and captures stdout stream
 fn systemctl_capture(args: Vec<&str>) -> std::io::Result<String> {
-    let mut child =
-        std::process::Command::new(default_env!("SYSTEMCTL_PATH", "/usr/bin/systemctl"))
-            .args(args.clone())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn()?;
+    let mut child = std::process::Command::new(
+        std::env::var("SYSTEMCTL_PATH").unwrap_or(SYSTEMCTL_PATH.into()),
+    )
+    .args(args.clone())
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::null())
+    .spawn()?;
     let _exitcode = child.wait()?;
     //TODO: improve this please
     //Interrogating some services returns an error code
@@ -120,7 +121,7 @@ pub fn list_units_full(
     type_filter: Option<&str>,
     state_filter: Option<&str>,
     glob: Option<&str>,
-) -> std::io::Result<Vec<SmallUnitList>> {
+) -> std::io::Result<Vec<UnitList>> {
     let mut args = vec!["list-unit-files"];
     if let Some(filter) = type_filter {
         args.push("--type");
@@ -133,34 +134,32 @@ pub fn list_units_full(
     if let Some(glob) = glob {
         args.push(glob)
     }
+    let mut result: Vec<UnitList> = Vec::new();
     let content = systemctl_capture(args)?;
     let lines = content
         .lines()
         .filter(|line| line.contains('.') && !line.ends_with('.'));
 
-    let mut res_vec: Vec<SmallUnitList> = Vec::new();
-
-    for line in lines {
-        let parsed: Vec<&str> = line.split_ascii_whitespace().collect();
+    for l in lines {
+        let parsed: Vec<&str> = l.split_ascii_whitespace().collect();
         let vendor_preset = match parsed[2] {
             "-" => None,
             "enabled" => Some(true),
             "disabled" => Some(false),
-            _ => Some(false),
+            _ => None,
         };
-        res_vec.push(SmallUnitList {
+        result.push(UnitList {
             unit_file: parsed[0].to_string(),
             state: parsed[1].to_string(),
             vendor_preset,
         })
     }
-
-    Ok(res_vec)
+    Ok(result)
 }
 
 #[derive(Clone, Debug, Default)]
 #[allow(dead_code)]
-pub struct SmallUnitList {
+pub struct UnitList {
     pub unit_file: String,
     pub state: String,
     pub vendor_preset: Option<bool>,
