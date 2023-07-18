@@ -418,7 +418,10 @@ impl Unit {
         let name = items[0];
 
         // `type` is deduced from .extension
-        u.utype = Type::from_str(items[1].trim()).unwrap();
+        u.utype = match Type::from_str(items[1].trim()) {
+            Ok(t) => t,
+            Err(e) => panic!("For {} -> {e}", items[1].trim()),
+        };
         let mut docs: Vec<Doc> = Vec::with_capacity(3);
         let mut is_doc = false;
         for line in lines {
