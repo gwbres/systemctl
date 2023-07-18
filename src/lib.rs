@@ -425,10 +425,7 @@ impl Unit {
                     u.script = items[0].trim().to_string();
                     u.auto_start = match AutoStartStatus::from_str(items[1].trim()) {
                         Ok(x) => x,
-                        Err(e) => {
-                            println!("lol: {:?} -> {e}", items[1].trim());
-                            AutoStartStatus::Disabled
-                        },
+                        Err(_) => AutoStartStatus::Disabled,
                     };
                     if items.len() > 2 {
                         // preset is optionnal ?
@@ -643,7 +640,7 @@ mod test {
         }
     }
     #[test]
-    fn test_unit_list() {
+    fn test_list_units_full() {
         let units = list_units_full(None, None, None).unwrap(); // all units
         for unit in units {
             println!("####################################");
