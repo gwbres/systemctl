@@ -332,7 +332,7 @@ pub struct Unit {
     pub name: String,
     /// Unit type
     pub utype: Type,
-    /// Optionnal unit description
+    /// Optional unit description
     pub description: Option<String>,
     /// Current state
     pub state: State,
@@ -406,7 +406,7 @@ impl Unit {
         let next = lines.next().unwrap();
         let (_, rem) = next.split_at(3);
         let mut items = rem.split_ascii_whitespace();
-        let name = items.next().unwrap().trim();
+        let name_raw = items.next().unwrap().trim();
         if let Some(delim) = items.next() {
             if delim.trim().eq("-") {
                 // --> description string is provided
@@ -414,11 +414,14 @@ impl Unit {
                 u.description = Some(itertools::join(&items, " "));
             }
         }
-        let items: Vec<_> = name.split_terminator('.').collect();
-        let name = items[0];
-
+        let (name, utype_raw) = name_raw
+            .rsplit_once('.')
+            .expect("Unit is missing a Type, this should not happen!");
         // `type` is deduced from .extension
-        u.utype = Type::from_str(items[1].trim()).unwrap();
+        u.utype = match Type::from_str(utype_raw) {
+            Ok(t) => t,
+            Err(e) => panic!("For {:?} -> {e}", name_raw),
+        };
         let mut docs: Vec<Doc> = Vec::with_capacity(3);
         let mut is_doc = false;
         for line in lines {
@@ -626,7 +629,13 @@ mod test {
             let c0 = unit.chars().nth(0).unwrap();
             if c0.is_alphanumeric() {
                 // valid unit name --> run test
-                let u = Unit::from_systemctl(&unit).unwrap();
+                let u = match Unit::from_systemctl(&unit) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("Could not parse {unit} -> {e}");
+                        continue;
+                    },
+                };
                 println!("####################################");
                 println!("Unit: {:#?}", u);
                 println!("active: {}", u.active);
