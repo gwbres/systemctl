@@ -5,14 +5,10 @@ license = "MIT OR Apache-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Small crate to interact with systemd units"
 homepage = "https://github.com/gwbres/systemctl"
-edition = "2018"
+edition = "2021"
 readme = "README.md"
 
-[env]
-SYSTEMCTL_PATH = { value = "/usr/bin/systemctl", relative = false }
-
 [dependencies]
-strum = "0.24.0"
-strum_macros = "0.24.0"
-itertools = "0.10.3"
-default-env = "0.1"
+strum = "0.25"
+strum_macros = "0.25"
+itertools = "0.11"
