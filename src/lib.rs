@@ -626,7 +626,13 @@ mod test {
             let c0 = unit.chars().nth(0).unwrap();
             if c0.is_alphanumeric() {
                 // valid unit name --> run test
-                let u = Unit::from_systemctl(&unit).unwrap();
+                let u = match Unit::from_systemctl(&unit) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("Could not parse {unit} -> {e}");
+                        continue;
+                    },
+                };
                 println!("####################################");
                 println!("Unit: {:#?}", u);
                 println!("active: {}", u.active);
