@@ -414,8 +414,7 @@ impl Unit {
                 u.description = Some(itertools::join(&items, " "));
             }
         }
-        let (name, utype_raw) = name_raw.rsplit_once('.').unwrap_or((name_raw, ""));
-
+        let (name, utype_raw) = name_raw.rsplit_once('.').expect("Unit is missing a Type, this should not happen!");
         // `type` is deduced from .extension
         u.utype = match Type::from_str(utype_raw) {
             Ok(t) => t,
