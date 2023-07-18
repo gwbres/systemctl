@@ -113,10 +113,10 @@ pub fn exists(unit: &str) -> std::io::Result<bool> {
     Ok(!unit_list.is_empty())
 }
 
-/// Returns list of units extracted from systemctl listing.   
-///  + type filter: optional --type filter
-///  + state filter: optional --state filter
-///  + glob filter: optional for unit name
+/// Returns a `Vector` of `UnitList` structs extracted from systemctl listing.   
+///  + type filter: optional `--type` filter
+///  + state filter: optional `--state` filter
+///  + glob filter: optional unit name filter
 pub fn list_units_full(
     type_filter: Option<&str>,
     state_filter: Option<&str>,
@@ -159,12 +159,21 @@ pub fn list_units_full(
 
 #[derive(Clone, Debug, Default)]
 #[allow(dead_code)]
+/// Implementation of list generated with
+/// `systemctl list-unit-files`
 pub struct UnitList {
+    /// Unit name: `name.type`
     pub unit_file: String,
+    /// Unit state
     pub state: String,
+    /// Unit vendor preset
     pub vendor_preset: Option<bool>,
 }
 
+/// Returns a `Vector` of unit names extracted from systemctl listing.   
+///  + type filter: optional `--type` filter
+///  + state filter: optional `--state` filter
+///  + glob filter: optional unit name filter
 pub fn list_units(
     type_filter: Option<&str>,
     state_filter: Option<&str>,
