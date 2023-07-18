@@ -422,7 +422,6 @@ impl Unit {
             Ok(t) => t,
             Err(e) => panic!("For {:?} -> {e}", name_raw),
         };
-        let mut docs: Vec<Doc> = Vec::with_capacity(3);
         let mut is_doc = false;
         for line in lines {
             let line = line.trim_start();
@@ -456,7 +455,7 @@ impl Unit {
             } else if let Some(line) = line.strip_prefix("Docs: ") {
                 is_doc = true;
                 if let Ok(doc) = Doc::from_str(line) {
-                    docs.push(doc)
+                    u.docs.get_or_insert_with(Vec::new).push(doc);
                 }
             } else if let Some(line) = line.strip_prefix("What: ") {
                 // mountpoint infos
@@ -498,7 +497,7 @@ impl Unit {
                 if is_doc {
                     let line = line.trim_start();
                     if let Ok(doc) = Doc::from_str(line) {
-                        docs.push(doc)
+                        u.docs.get_or_insert_with(Vec::new).push(doc);
                     }
                 }
             }
