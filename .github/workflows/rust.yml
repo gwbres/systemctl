@@ -30,4 +30,4 @@ jobs:
       run: cargo clippy --all -- -D warnings
     - uses: taiki-e/install-action@nextest
     - name: Cargo Test
-      run: cargo nextest run
+      run: cargo nextest run --no-capture --no-fail-fast
