@@ -332,7 +332,7 @@ pub struct Unit {
     pub name: String,
     /// Unit type
     pub utype: Type,
-    /// Optionnal unit description
+    /// Optional unit description
     pub description: Option<String>,
     /// Current state
     pub state: State,
@@ -406,7 +406,7 @@ impl Unit {
         let next = lines.next().unwrap();
         let (_, rem) = next.split_at(3);
         let mut items = rem.split_ascii_whitespace();
-        let name = items.next().unwrap().trim();
+        let name_raw = items.next().unwrap().trim();
         if let Some(delim) = items.next() {
             if delim.trim().eq("-") {
                 // --> description string is provided
@@ -414,12 +414,14 @@ impl Unit {
                 u.description = Some(itertools::join(&items, " "));
             }
         }
-        let items: Vec<_> = name.split_terminator('.').collect();
-        let name = items[0];
-
+        let (name, utype_raw) = name_raw
+            .rsplit_once('.')
+            .expect("Unit is missing a Type, this should not happen!");
         // `type` is deduced from .extension
-        u.utype = Type::from_str(items[1].trim()).unwrap();
-        let mut docs: Vec<Doc> = Vec::with_capacity(3);
+        u.utype = match Type::from_str(utype_raw) {
+            Ok(t) => t,
+            Err(e) => panic!("For {:?} -> {e}", name_raw),
+        };
         let mut is_doc = false;
         for line in lines {
             let line = line.trim_start();
@@ -453,7 +455,7 @@ impl Unit {
             } else if let Some(line) = line.strip_prefix("Docs: ") {
                 is_doc = true;
                 if let Ok(doc) = Doc::from_str(line) {
-                    docs.push(doc)
+                    u.docs.get_or_insert_with(Vec::new).push(doc);
                 }
             } else if let Some(line) = line.strip_prefix("What: ") {
                 // mountpoint infos
@@ -495,7 +497,7 @@ impl Unit {
                 if is_doc {
                     let line = line.trim_start();
                     if let Ok(doc) = Doc::from_str(line) {
-                        docs.push(doc)
+                        u.docs.get_or_insert_with(Vec::new).push(doc);
                     }
                 }
             }
