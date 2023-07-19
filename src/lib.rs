@@ -1,61 +1,74 @@
 //! Crate to manage and monitor services through `systemctl`   
 //! Homepage: <https://github.com/gwbres/systemctl>
 use std::io::{Error, ErrorKind, Read};
-use std::process::ExitStatus;
+use std::process::{Child, ExitStatus};
 use std::str::FromStr;
 use strum_macros::EnumString;
 
 const SYSTEMCTL_PATH: &str = "/usr/bin/systemctl";
 
+/// Invokes `systemctl $args`
+fn spawn_child(args: Vec<&str>) -> std::io::Result<Child> {
+    std::process::Command::new(std::env::var("SYSTEMCTL_PATH").unwrap_or(SYSTEMCTL_PATH.into()))
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+}
+
 /// Invokes `systemctl $args` silently
 fn systemctl(args: Vec<&str>) -> std::io::Result<ExitStatus> {
-    let mut child = std::process::Command::new(
-        std::env::var("SYSTEMCTL_PATH").unwrap_or(SYSTEMCTL_PATH.into()),
-    )
-    .args(args)
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::null())
-    .spawn()?;
-    child.wait()
+    spawn_child(args)?.wait()
 }
 
 /// Invokes `systemctl $args` and captures stdout stream
 fn systemctl_capture(args: Vec<&str>) -> std::io::Result<String> {
-    let mut child = std::process::Command::new(
-        std::env::var("SYSTEMCTL_PATH").unwrap_or(SYSTEMCTL_PATH.into()),
-    )
-    .args(args.clone())
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::null())
-    .spawn()?;
-    let _exitcode = child.wait()?;
-    //TODO: improve this please
-    //Interrogating some services returns an error code
-    //match exitcode.success() {
-    //true => {
-    let mut stdout: Vec<u8> = Vec::new();
-    if let Ok(size) = child.stdout.unwrap().read_to_end(&mut stdout) {
-        if size > 0 {
-            if let Ok(s) = String::from_utf8(stdout) {
-                Ok(s)
-            } else {
-                Err(Error::new(
-                    ErrorKind::InvalidData,
-                    "Invalid utf8 data in stdout",
-                ))
-            }
-        } else {
-            Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
-        }
-    } else {
-        Err(Error::new(ErrorKind::InvalidData, "systemctl stdout empty"))
+    let mut child = spawn_child(args)?;
+    match child.wait()?.code() {
+        Some(code) if code == 0 => {}, // success
+        Some(code) if code == 1 => {}, // success -> Ok(Unit not found)
+        Some(code) if code == 3 => {}, // success -> Ok(unit is inactive and/or dead)
+        Some(code) if code == 4 => {
+            return Err(Error::new(
+                ErrorKind::PermissionDenied,
+                "Missing Priviledges or Unit not found",
+            ))
+        },
+        // unknown errorcodes
+        Some(code) => {
+            return Err(Error::new(
+                // TODO: Maybe a better ErrorKind, none really seem to fit
+                ErrorKind::Other,
+                format!("Process exited with code: {code}"),
+            ));
+        },
+        None => {
+            return Err(Error::new(
+                ErrorKind::Interrupted,
+                "Process terminated by signal",
+            ))
+        },
     }
-    /*},
-        false => {
-            Err(Error::new(ErrorKind::Other,
-                format!("/usr/bin/systemctl {:?} failed", args)))
+
+    let mut stdout: Vec<u8> = Vec::new();
+    let size = child.stdout.unwrap().read_to_end(&mut stdout)?;
+
+    if size > 0 {
+        if let Ok(s) = String::from_utf8(stdout) {
+            return Ok(s);
+        } else {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Invalid utf8 data in stdout",
+            ));
         }
-    }*/
+    }
+
+    // if this is reached all if's above did not work
+    Err(Error::new(
+        ErrorKind::UnexpectedEof,
+        "systemctl stdout empty",
+    ))
 }
 
 /// Forces given `unit` to (re)start
@@ -63,9 +76,24 @@ pub fn restart(unit: &str) -> std::io::Result<ExitStatus> {
     systemctl(vec!["restart", unit])
 }
 
+/// Forces given `unit` to start
+pub fn start(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["start", unit])
+}
+
 /// Forces given `unit` to stop
 pub fn stop(unit: &str) -> std::io::Result<ExitStatus> {
     systemctl(vec!["stop", unit])
+}
+
+/// Enable given `unit` to start at boot
+pub fn enable(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["enable", unit])
+}
+
+/// Disable given `unit` to start at boot
+pub fn disable(unit: &str) -> std::io::Result<ExitStatus> {
+    systemctl(vec!["disable", unit])
 }
 
 /// Returns raw status from `systemctl status $unit` call
@@ -106,10 +134,7 @@ pub fn unfreeze(unit: &str) -> std::io::Result<ExitStatus> {
 /// ie., service could be or is actively deployed
 /// and manageable by systemd
 pub fn exists(unit: &str) -> std::io::Result<bool> {
-    let unit_list = match list_units(None, None, Some(unit)) {
-        Ok(l) => l,
-        Err(e) => return Err(e),
-    };
+    let unit_list = list_units(None, None, Some(unit))?;
     Ok(!unit_list.is_empty())
 }
 
@@ -274,7 +299,7 @@ impl Default for Process {
 
 /// Doc describes types of documentation possibly
 /// available for a systemd `unit`
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Doc {
     /// Man page is available
     Man(String),
@@ -326,7 +351,7 @@ impl std::str::FromStr for Doc {
 }
 
 /// Structure to describe a systemd `unit`
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Unit {
     /// Unit name
     pub name: String,
@@ -396,7 +421,7 @@ impl Unit {
     pub fn from_systemctl(name: &str) -> std::io::Result<Unit> {
         if let Ok(false) = exists(name) {
             return Err(Error::new(
-                ErrorKind::InvalidData,
+                ErrorKind::NotFound,
                 format!("Unit or service \"{}\" does not exist", name),
             ));
         }
@@ -535,6 +560,26 @@ impl Unit {
         restart(&self.name)
     }
 
+    /// Starts Self by invoking `systemctl`
+    pub fn start(&self) -> std::io::Result<ExitStatus> {
+        start(&self.name)
+    }
+
+    /// Stops Self by invoking `systemctl`
+    pub fn stop(&self) -> std::io::Result<ExitStatus> {
+        stop(&self.name)
+    }
+
+    /// Enable Self to start at boot
+    pub fn enable(&self) -> std::io::Result<ExitStatus> {
+        enable(&self.name)
+    }
+
+    /// Disable Self to start at boot
+    pub fn disable(&self) -> std::io::Result<ExitStatus> {
+        disable(&self.name)
+    }
+
     /// Returns verbose status for Self
     pub fn status(&self) -> std::io::Result<String> {
         status(&self.name)
@@ -564,24 +609,43 @@ impl Unit {
     pub fn unfreeze(&self) -> std::io::Result<ExitStatus> {
         unfreeze(&self.name)
     }
+
+    /// Returns `true` if given `unit` exists,
+    /// ie., service could be or is actively deployed
+    /// and manageable by systemd
+    pub fn exists(&self) -> std::io::Result<bool> {
+        exists(&self.name)
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+
     #[test]
-    fn test_status() {
-        let status = status("sshd");
+    fn test_status_success() {
+        let status = status("cron");
+        println!("cron status: {:#?}", status);
         assert!(status.is_ok());
-        println!("sshd status : {:#?}", status)
     }
+
+    #[test]
+    fn test_status_failure() {
+        let status = status("not-existing");
+        println!("not-existing status: {:#?}", status);
+        assert!(status.is_err());
+        let result = status.map_err(|e| e.kind());
+        let expected = Err(ErrorKind::PermissionDenied);
+        assert_eq!(expected, result);
+    }
+
     #[test]
     fn test_is_active() {
         let units = vec!["sshd", "dropbear", "ntpd"];
         for u in units {
             let active = is_active(u);
-            assert!(active.is_ok());
             println!("{} is-active: {:#?}", u, active);
+            assert!(active.is_ok());
         }
     }
     #[test]
@@ -596,8 +660,8 @@ mod test {
         ];
         for u in units {
             let ex = exists(u);
-            assert!(ex.is_ok());
             println!("{} exists: {:#?}", u, ex);
+            assert!(ex.is_ok());
         }
     }
     #[test]
@@ -613,8 +677,29 @@ mod test {
     #[test]
     fn test_non_existing_unit() {
         let unit = Unit::from_systemctl("non-existing");
-        assert_eq!(unit.is_err(), true);
+        assert!(unit.is_err().clone());
+        let result = unit.map_err(|e| e.kind());
+        let expected = Err(ErrorKind::NotFound);
+        assert_eq!(expected, result);
     }
+
+    #[test]
+    fn test_systemctl_exitcode_success() {
+        let u = Unit::from_systemctl("cron.service");
+        println!("{:#?}", u);
+        assert!(u.is_ok());
+    }
+
+    #[test]
+    fn test_systemctl_exitcode_not_found() {
+        let u = Unit::from_systemctl("cran.service");
+        println!("{:#?}", u);
+        assert!(u.is_err().clone());
+        let result = u.map_err(|e| e.kind());
+        let expected = Err(ErrorKind::NotFound);
+        assert_eq!(expected, result);
+    }
+
     #[test]
     fn test_service_unit_construction() {
         let units = list_units(None, None, None).unwrap(); // all units
