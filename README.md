@@ -40,15 +40,18 @@ if let Ok(true) = systemctl::exists("ntpd") {
 ```rust
 use systemctl;
 // list all units
-systemctl::list_units(None, None);
+systemctl::list_units(None, None, None);
 
 // list all services 
 // by adding a --type filter
-systemctl::list_units(Some("service"), None);
+systemctl::list_units(Some("service"), None, None);
 
 // list all services currently `enabled` 
 // by adding a --state filter
-systemctl::list_units(Some("service"), Some("enabled"));
+systemctl::list_units(Some("service"), Some("enabled"), None);
+
+// list all services starting with cron
+systemctl::list_units(Some("service"), None, Some("cron*"));
 ```
 
 ## Unit structure
@@ -83,6 +86,3 @@ println!("Memory consumption: {}", unit.memory.unwrap());
 ## TODO
 
 * [ ] parse all known attributes in `from_systemctl`
-* [ ] currently we study (try to parse) stdio result from systemctl() invokation,
-without testing the exit status, which is bad. This is due to the fact
-that we get apparently get an error code, on existing units that currently have a `dead` state
