@@ -5,6 +5,9 @@ use std::process::{Child, ExitStatus};
 use std::str::FromStr;
 use strum_macros::EnumString;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 const SYSTEMCTL_PATH: &str = "/usr/bin/systemctl";
 
 /// Invokes `systemctl $args`
@@ -182,8 +185,8 @@ pub fn list_units_full(
     Ok(result)
 }
 
-#[derive(Clone, Debug, Default)]
-#[allow(dead_code)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 /// Implementation of list generated with
 /// `systemctl list-unit-files`
 pub struct UnitList {
@@ -220,6 +223,7 @@ pub fn list_enabled_services() -> std::io::Result<Vec<String>> {
 
 /// `AutoStartStatus` describes the Unit current state
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum AutoStartStatus {
     #[strum(serialize = "static")]
     Static,
@@ -240,6 +244,7 @@ pub enum AutoStartStatus {
 
 /// `Type` describes a Unit declaration Type in systemd
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Type {
     #[strum(serialize = "automount")]
     AutoMount,
@@ -264,6 +269,7 @@ pub enum Type {
 
 /// `State` describes a Unit current state
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum State {
     #[strum(serialize = "masked")]
     #[default]
@@ -300,6 +306,7 @@ impl Default for Process {
 /// Doc describes types of documentation possibly
 /// available for a systemd `unit`
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Doc {
     /// Man page is available
     Man(String),
@@ -352,6 +359,7 @@ impl std::str::FromStr for Doc {
 
 /// Structure to describe a systemd `unit`
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Unit {
     /// Unit name
     pub name: String,
@@ -737,5 +745,32 @@ mod test {
             println!("Vendor Preset: {:?}", unit.vendor_preset);
             println!("####################################");
         }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_serde_for_unit() {
+        let mut u = Unit::default();
+        // make sure we test all enums
+        u.docs
+            .get_or_insert_with(Vec::new)
+            .push(Doc::Man("some instruction".into()));
+        u.auto_start = AutoStartStatus::Transient;
+        u.state = State::Loaded;
+        u.utype = Type::Socket;
+        // serde
+        let json_u = serde_json::to_string(&u).unwrap();
+        let reverse = serde_json::from_str(&json_u).unwrap();
+        assert_eq!(u, reverse);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_serde_for_unit_list() {
+        let u = UnitList::default();
+        // serde
+        let json_u = serde_json::to_string(&u).unwrap();
+        let reverse = serde_json::from_str(&json_u).unwrap();
+        assert_eq!(u, reverse);
     }
 }

@@ -31,3 +31,9 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - name: Cargo Test
       run: cargo nextest run --all-features --no-capture --no-fail-fast
+    - name: auto-merge Dependabot
+      if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+      run: |
+        gh pr merge --merge $GITHUB_HEAD_REF
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
