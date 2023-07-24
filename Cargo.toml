@@ -10,6 +10,7 @@ readme = "README.md"
 
 [features]
 default = []
+serde = ["dep:serde"]
 
 [dependencies]
 strum = "0.25"
