@@ -4,10 +4,18 @@ Small rust crate to interact with systemd units
 
 [![crates.io](https://img.shields.io/crates/v/systemctl.svg)](https://crates.io/crates/systemctl)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/gwbres/systemctl/blob/main/LICENSE-APACHE)
-[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/gwbres/systemctl/blob/main/LICENSE-MIT) 
-[![crates.io](https://img.shields.io/crates/d/systemctl.svg)](https://crates.io/crates/systemctl)   
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/gwbres/systemctl/blob/main/LICENSE-MIT)
+[![crates.io](https://img.shields.io/crates/d/systemctl.svg)](https://crates.io/crates/systemctl)  
 [![Rust](https://github.com/gwbres/systemctl/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/gwbres/systemctl/actions/workflows/rust.yml)
 [![crates.io](https://docs.rs/systemctl/badge.svg)](https://docs.rs/systemctl/badge.svg)
+
+## Features
+
+* serde: Enable to make structs in this crate De-/Serializable
+
+## Limitations
+
+Currently SystemD Version <245 are not supported as unit-file-list changed from two column to three column setup. See: [SystemD Changelog](https://github.com/systemd/systemd/blob/16bfb12c8f815a468021b6e20871061d20b50f57/NEWS#L6073)
 
 ## Environment
 

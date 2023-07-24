@@ -685,7 +685,7 @@ mod test {
     #[test]
     fn test_non_existing_unit() {
         let unit = Unit::from_systemctl("non-existing");
-        assert!(unit.is_err().clone());
+        assert!(unit.is_err());
         let result = unit.map_err(|e| e.kind());
         let expected = Err(ErrorKind::NotFound);
         assert_eq!(expected, result);
@@ -702,7 +702,7 @@ mod test {
     fn test_systemctl_exitcode_not_found() {
         let u = Unit::from_systemctl("cran.service");
         println!("{:#?}", u);
-        assert!(u.is_err().clone());
+        assert!(u.is_err());
         let result = u.map_err(|e| e.kind());
         let expected = Err(ErrorKind::NotFound);
         assert_eq!(expected, result);
@@ -713,15 +713,15 @@ mod test {
         let units = list_units(None, None, None).unwrap(); // all units
         for unit in units {
             let unit = unit.as_str();
-            if unit.contains("@") {
+            if unit.contains('@') {
                 // not testing this one
                 // would require @x service # identification / enumeration
                 continue;
             }
-            let c0 = unit.chars().nth(0).unwrap();
+            let c0 = unit.chars().next().unwrap();
             if c0.is_alphanumeric() {
                 // valid unit name --> run test
-                let u = Unit::from_systemctl(&unit).unwrap();
+                let u = Unit::from_systemctl(unit).unwrap();
                 println!("####################################");
                 println!("Unit: {:#?}", u);
                 println!("active: {}", u.active);
