@@ -22,6 +22,7 @@ fn spawn_child(args: Vec<&str>) -> std::io::Result<Child> {
 /// Invokes `systemctl $args` silently
 fn systemctl(args: Vec<&str>) -> std::io::Result<ExitStatus> {
     spawn_child(args)?.wait()
+
 }
 
 /// Invokes `systemctl $args` and captures stdout stream
@@ -65,6 +66,7 @@ fn systemctl_capture(args: Vec<&str>) -> std::io::Result<String> {
                 "Invalid utf8 data in stdout",
             ));
         }
+
     }
 
     // if this is reached all if's above did not work
@@ -72,11 +74,12 @@ fn systemctl_capture(args: Vec<&str>) -> std::io::Result<String> {
         ErrorKind::UnexpectedEof,
         "systemctl stdout empty",
     ))
+
 }
 
 /// Forces given `unit` to (re)start
-pub fn restart(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["restart", unit])
+pub fn _restart(unit: &str) -> std::io::Result<ExitStatus> {
+    _systemctl(vec!["restart", unit])
 }
 
 /// Forces given `unit` to start
@@ -85,8 +88,8 @@ pub fn start(unit: &str) -> std::io::Result<ExitStatus> {
 }
 
 /// Forces given `unit` to stop
-pub fn stop(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["stop", unit])
+pub fn _stop(unit: &str) -> std::io::Result<ExitStatus> {
+   _systemctl(vec!["stop", unit])
 }
 
 /// Triggers reload for given `unit`
@@ -127,20 +130,20 @@ pub fn is_active(unit: &str) -> std::io::Result<bool> {
 
 /// Isolates given unit, only self and its dependencies are
 /// now actively running
-pub fn isolate(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["isolate", unit])
+pub fn _isolate(unit: &str) -> std::io::Result<ExitStatus> {
+    _systemctl(vec!["isolate", unit])
 }
 
 /// Freezes (halts) given unit.
 /// This operation might not be feasible.
-pub fn freeze(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["freeze", unit])
+pub fn _freeze(unit: &str) -> std::io::Result<ExitStatus> {
+   _systemctl(vec!["freeze", unit])
 }
 
 /// Unfreezes given unit (recover from halted state).
 /// This operation might not be feasible.
-pub fn unfreeze(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["thaw", unit])
+pub fn _unfreeze(unit: &str) -> std::io::Result<ExitStatus> {
+    _systemctl(vec!["thaw", unit])
 }
 
 /// Returns `true` if given `unit` exists,
@@ -174,6 +177,7 @@ pub fn list_units_full(
     }
     let mut result: Vec<UnitList> = Vec::new();
     let content = systemctl_capture(args)?;
+
     let lines = content
         .lines()
         .filter(|line| line.contains('.') && !line.ends_with('.'));
@@ -191,6 +195,7 @@ pub fn list_units_full(
             state: parsed[1].to_string(),
             vendor_preset,
         })
+
     }
     Ok(result)
 }
@@ -222,6 +227,7 @@ pub fn list_units(
 }
 
 /// Returns list of services that are currently declared as disabled
+
 pub fn list_disabled_services() -> std::io::Result<Vec<String>> {
     list_units(Some("service"), Some("disabled"), None)
 }
@@ -229,6 +235,7 @@ pub fn list_disabled_services() -> std::io::Result<Vec<String>> {
 /// Returns list of services that are currently declared as enabled
 pub fn list_enabled_services() -> std::io::Result<Vec<String>> {
     list_units(Some("service"), Some("enabled"), None)
+
 }
 
 /// `AutoStartStatus` describes the Unit current state
@@ -250,6 +257,31 @@ pub enum AutoStartStatus {
     Indirect,
     #[strum(serialize = "transient")]
     Transient,
+
+    #[strum(serialize = "enabled-runtime")]
+    EnabledRuntime,
+
+}
+
+impl ToString for AutoStartStatus{
+    fn to_string(&self) -> String {
+        match self {
+            AutoStartStatus::Static => "static".to_string(),
+            AutoStartStatus::Enabled => "enabled".to_string(),
+            AutoStartStatus::Disabled => "disabled".to_string(),
+            AutoStartStatus::Generated => "generated".to_string(),
+            AutoStartStatus::Indirect => "indirect".to_string(),
+            AutoStartStatus::Transient => "transient".to_string(),
+            AutoStartStatus::EnabledRuntime => "enabled-runtime".to_string(),
+        }
+    }
+}
+
+impl Default for AutoStartStatus {
+    fn default() -> AutoStartStatus {
+        AutoStartStatus::Disabled
+    }
+      
 }
 
 /// `Type` describes a Unit declaration Type in systemd
@@ -275,6 +307,34 @@ pub enum Type {
     Path,
     #[strum(serialize = "target")]
     Target,
+    #[strum(serialize = "swap")]
+    Swap,
+    #[strum(serialize = "aa-prompt-listener")]
+    AaPromptListener,
+    #[strum(serialize = "system-shutdown")]
+    SystemShutdown,
+    #[strum(serialize = "recovery-chooser-trigger")]
+    RecoveryChooserTrigger,
+    #[strum(serialize = "failure")]
+    Failure,
+    #[strum(serialize = "unmount")]
+    Unmount,
+    #[strum(serialize = "autoimport")]
+    AutoImport,
+    #[strum(serialize = "snap-repair")]
+    SnapRepair,
+    #[strum(serialize = "mounts-pre")]
+    MountsPre,
+    #[strum(serialize = "mounts-post")]
+    MountsPost,
+    #[strum(serialize = "mounts")]
+    Mounts,
+    #[strum(serialize = "seeded")]
+    Seeded,
+    #[strum(serialize = "apparmor")]
+    Apparmor,
+    #[strum(serialize = "core-fixup")]
+    CoreFixup,
 }
 
 /// `State` describes a Unit current state
@@ -288,7 +348,9 @@ pub enum State {
     Loaded,
 }
 
-/*
+
+
+
 /// Process
 #[derive(Clone, Debug)]
 pub struct Process {
@@ -302,16 +364,7 @@ pub struct Process {
     status: String,
 }
 
-impl Default for Process {
-    fn default() -> Process {
-        Process {
-            pid: 0,
-            command: Default::default(),
-            code: Default::default(),
-            status: Default::default(),
-        }
-    }
-}*/
+
 
 /// Doc describes types of documentation possibly
 /// available for a systemd `unit`
@@ -326,14 +379,14 @@ pub enum Doc {
 
 impl Doc {
     /// Unwrapps self as `Man` page
-    pub fn as_man(&self) -> Option<&str> {
+    pub fn _as_man(&self) -> Option<&str> {
         match self {
             Doc::Man(s) => Some(s),
             _ => None,
         }
     }
     /// Unwrapps self as webpage `Url`
-    pub fn as_url(&self) -> Option<&str> {
+    pub fn _as_url(&self) -> Option<&str> {
         match self {
             Doc::Url(s) => Some(s),
             _ => None,
@@ -457,6 +510,7 @@ impl Unit {
                 u.description = Some(itertools::join(&items, " "));
             }
         }
+
         let (name, utype_raw) = name_raw
             .rsplit_once('.')
             .expect("Unit is missing a Type, this should not happen!");
@@ -480,6 +534,7 @@ impl Unit {
                         Ok(x) => x,
                         Err(_) => AutoStartStatus::Disabled,
                     };
+
                     if items.len() > 2 {
                         // preset is optionnal ?
                         u.preset = items[2].trim().ends_with("enabled");
@@ -574,8 +629,8 @@ impl Unit {
     }
 
     /// Restarts Self by invoking `systemctl`
-    pub fn restart(&self) -> std::io::Result<ExitStatus> {
-        restart(&self.name)
+    pub fn _restart(&self) -> std::io::Result<ExitStatus> {
+        _restart(&self.name)
     }
 
     /// Starts Self by invoking `systemctl`
@@ -614,28 +669,28 @@ impl Unit {
     }
 
     /// Returns `true` if Self is actively running
-    pub fn is_active(&self) -> std::io::Result<bool> {
+    pub fn _is_active(&self) -> std::io::Result<bool> {
         is_active(&self.name)
     }
 
     /// `Isolate` Self, meaning stops all other units but
     /// self and its dependencies
-    pub fn isolate(&self) -> std::io::Result<ExitStatus> {
-        isolate(&self.name)
+    pub fn _isolate(&self) -> std::io::Result<ExitStatus> {
+        _isolate(&self.name)
     }
 
     /// `Freezes` Self, halts self and CPU load will
     /// no longer be dedicated to its execution.
     /// This operation might not be feasible.
     /// `unfreeze()` is the mirror operation
-    pub fn freeze(&self) -> std::io::Result<ExitStatus> {
-        freeze(&self.name)
+    pub fn _freeze(&self) -> std::io::Result<ExitStatus> {
+        _freeze(&self.name)
     }
 
     /// `Unfreezes` Self, exists halted state.
     /// This operation might not be feasible.
-    pub fn unfreeze(&self) -> std::io::Result<ExitStatus> {
-        unfreeze(&self.name)
+    pub fn _unfreeze(&self) -> std::io::Result<ExitStatus> {
+        _unfreeze(&self.name)
     }
 
     /// Returns `true` if given `unit` exists,
@@ -645,6 +700,8 @@ impl Unit {
         exists(&self.name)
     }
 }
+
+
 
 #[cfg(test)]
 mod test {
@@ -694,12 +751,12 @@ mod test {
     }
     #[test]
     fn test_disabled_services() {
-        let services = list_disabled_services().unwrap();
+        let services = _list_disabled_services().unwrap();
         println!("disabled services: {:#?}", services)
     }
     #[test]
     fn test_enabled_services() {
-        let services = list_enabled_services().unwrap();
+        let services = _list_enabled_services().unwrap();
         println!("enabled services: {:#?}", services)
     }
     #[test]
@@ -726,11 +783,14 @@ mod test {
         let result = u.map_err(|e| e.kind());
         let expected = Err(ErrorKind::NotFound);
         assert_eq!(expected, result);
+
     }
 
     #[test]
     fn test_service_unit_construction() {
+
         let units = list_units(None, None, None).unwrap(); // all units
+
         for unit in units {
             let unit = unit.as_str();
             if unit.contains('@') {
@@ -738,11 +798,14 @@ mod test {
                 // would require @x service # identification / enumeration
                 continue;
             }
+
             let c0 = unit.chars().next().unwrap();
             if c0.is_alphanumeric() {
                 // valid unit name --> run test
                 let u = Unit::from_systemctl(unit).unwrap();
+
                 println!("####################################");
+                
                 println!("Unit: {:#?}", u);
                 println!("active: {}", u.active);
                 println!("preset: {}", u.preset);
