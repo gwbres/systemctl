@@ -1,32 +1,39 @@
 name: Rust
-
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
   pull_request:
     branches: [ main ]
-
-env:
-  CARGO_TERM_COLOR: always
-
+  push:
+    branches: [ main ]
 jobs:
   build:
+    permissions: write-all
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Setup 
-      uses: actions-rs/toolchain@v1
+    - uses: actions/checkout@v4
+    - uses: actions/cache@v3
       with:
-        toolchain: stable
-        override: true
-        components: rustfmt, clippy 
-    - name: Build
-      run: cargo build
-    - name: Test
-      run: cargo test -- --nocapture
-    - name: Build (all features)
-      run: cargo build --all-features
-    - name: Test (all features)
-      run: cargo test --all-features -- --nocapture
-    - name: Coding style
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          ~/.rustup
+          /usr/local/cargo
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    - name: Install Rust
+      run: rustup update stable
+    - name: Run rustfmt
       run: cargo fmt --all -- --check
+    - name: Run clippy
+      run: cargo clippy --all -- -D warnings
+    - uses: taiki-e/install-action@nextest
+    - name: Cargo Test
+      run: cargo nextest run --all-features --no-capture --no-fail-fast
+    - name: auto-merge Dependabot
+      if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+      run: |
+        gh pr merge --merge $GITHUB_HEAD_REF
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
