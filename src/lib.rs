@@ -12,30 +12,33 @@ const SYSTEMCTL_PATH: &str = "/usr/bin/systemctl";
 
 use bon::Builder;
 
-#[derive(Builder)]
-struct SystemCtl {
-    aditional_args: Vec<String>,
+#[derive(Builder, Default, Clone, Debug)]
+pub struct SystemCtl {
+    additional_args: Vec<String>,
     path: Option<String>
 }
 
 impl SystemCtl {
     /// Invokes `systemctl $args`
-    fn spawn_child(&self, args: Vec<&str>) -> std::io::Result<Child> {
+    fn spawn_child<'a, 's: 'a, S: IntoIterator<Item = &'a str>>(&'s self, args: S) -> std::io::Result<Child> {
         std::process::Command::new(self.get_path())
-            .args(args)
+            .args(self.additional_args.iter().map(String::as_str).chain(args))
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn()
     }
+
     fn get_path(&self) -> &str {
         self.path.as_ref().map(|s| s.as_str()).unwrap_or(SYSTEMCTL_PATH)
     }
+
     /// Invokes `systemctl $args` silently
-    fn systemctl(&self, args: Vec<&str>) -> std::io::Result<ExitStatus> {
+    fn systemctl<'a, 's: 'a, S: IntoIterator<Item = &'a str>>(&'s self, args: S) -> std::io::Result<ExitStatus> {
         self.spawn_child(args)?.wait()
     }
+
     /// Invokes `systemctl $args` and captures stdout stream
-    fn systemctl_capture(&self, args: Vec<&str>) -> std::io::Result<String> {
+    fn systemctl_capture<'a, 's: 'a, S: IntoIterator<Item = &'a str>>(&'s self, args: S) -> std::io::Result<String> {
         let mut child = self.spawn_child(args)?;
         match child.wait()?.code() {
             Some(code) if code == 0 => {}, // success
@@ -86,71 +89,71 @@ impl SystemCtl {
 
     /// Forces given `unit` to (re)start
     pub fn restart(&self, unit: &str) -> std::io::Result<ExitStatus> {
-        self.systemctl(vec!["restart", unit])
+        self.systemctl(["restart", unit])
     }
 
     /// Forces given `unit` to start
     pub fn start(&self, unit: &str) -> std::io::Result<ExitStatus> {
-        self.systemctl(vec!["start", unit])
+        self.systemctl(["start", unit])
     }
 
     /// Forces given `unit` to stop
     pub fn stop(&self, unit: &str) -> std::io::Result<ExitStatus> {
-        self.systemctl(vec!["stop", unit])
+        self.systemctl(["stop", unit])
     }
 
     /// Triggers reload for given `unit`
     pub fn reload(&self, unit: &str) -> std::io::Result<ExitStatus> {
-        self.systemctl(vec!["reload", unit])
+        self.systemctl(["reload", unit])
     }
 
     /// Triggers reload or restarts given `unit`
     pub fn reload_or_restart(&self, unit: &str) -> std::io::Result<ExitStatus> {
-        self.systemctl(vec!["reload-or-restart", unit])
+        self.systemctl(["reload-or-restart", unit])
     }
 
     /// Enable given `unit` to start at boot
     pub fn enable(&self, unit: &str) -> std::io::Result<ExitStatus> {
-        self.systemctl(vec!["enable", unit])
+        self.systemctl(["enable", unit])
     }
 
     /// Disable given `unit` to start at boot
     pub fn disable(&self, unit: &str) -> std::io::Result<ExitStatus> {
-        self.systemctl(vec!["disable", unit])
+        self.systemctl(["disable", unit])
     }
 
     /// Returns raw status from `systemctl status $unit` call
     pub fn status(&self, unit: &str) -> std::io::Result<String> {
-        self.systemctl_capture(vec!["status", unit])
+        self.systemctl_capture(["status", unit])
     }
 
     /// Invokes systemctl `cat` on given `unit`
     pub fn cat(&self, unit: &str) -> std::io::Result<String> {
-        self.systemctl_capture(vec!["cat", unit])
+        self.systemctl_capture(["cat", unit])
     }
 
     /// Returns `true` if given `unit` is actively running
     pub fn is_active(&self, unit: &str) -> std::io::Result<bool> {
-        let status = self.systemctl_capture(vec!["is-active", unit])?;
+        let status = self.systemctl_capture(["is-active", unit])?;
         Ok(status.trim_end().eq("active"))
     }
 
     /// Isolates given unit, only self and its dependencies are
     /// now actively running
     pub fn isolate(&self, unit: &str) -> std::io::Result<ExitStatus> {
-        self.systemctl(vec!["isolate", unit])
+        self.systemctl(["isolate", unit])
     }
 
     /// Freezes (halts) given unit.
     /// This operation might not be feasible.
     pub fn freeze(&self, unit: &str) -> std::io::Result<ExitStatus> {
-        self.systemctl(vec!["freeze", unit])
+        self.systemctl(["freeze", unit])
     }
 
     /// Unfreezes given unit (recover from halted state).
     /// This operation might not be feasible.
     pub fn unfreeze(&self, unit: &str) -> std::io::Result<ExitStatus> {
-        self.systemctl(vec!["thaw", unit])
+        self.systemctl(["thaw", unit])
     }
 
     /// Returns `true` if given `unit` exists,
@@ -228,6 +231,144 @@ impl SystemCtl {
     /// Returns list of services that are currently declared as enabled
     pub fn list_enabled_services(&self) -> std::io::Result<Vec<String>> {
         self.list_units(Some("service"), Some("enabled"), None)
+    }
+
+    /// Builds a new `Unit` structure by retrieving
+    /// structure attributes with a `systemctl status $unit` call
+    pub fn create_unit(&self, name: &str) -> std::io::Result<Unit> {
+        if let Ok(false) = self.exists(name) {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                format!("Unit or service \"{}\" does not exist", name),
+            ));
+        }
+        let mut u = Unit::default();
+        let status = self.status(name)?;
+        let mut lines = status.lines();
+        let next = lines.next().unwrap();
+        let (_, rem) = next.split_at(3);
+        let mut items = rem.split_ascii_whitespace();
+        let name_raw = items.next().unwrap().trim();
+        if let Some(delim) = items.next() {
+            if delim.trim().eq("-") {
+                // --> description string is provided
+                let items: Vec<_> = items.collect();
+                u.description = Some(itertools::join(&items, " "));
+            }
+        }
+        let (name, utype_raw) = name_raw
+            .rsplit_once('.')
+            .expect("Unit is missing a Type, this should not happen!");
+        // `type` is deduced from .extension
+        u.utype = match Type::from_str(utype_raw) {
+            Ok(t) => t,
+            Err(e) => panic!("For {:?} -> {e}", name_raw),
+        };
+        let mut is_doc = false;
+        for line in lines {
+            let line = line.trim_start();
+            if let Some(line) = line.strip_prefix("Loaded: ") {
+                // Match and get rid of "Loaded: "
+                if let Some(line) = line.strip_prefix("loaded ") {
+                    u.state = State::Loaded;
+                    let line = line.strip_prefix('(').unwrap();
+                    let line = line.strip_suffix(')').unwrap();
+                    let items: Vec<&str> = line.split(';').collect();
+                    u.script = items[0].trim().to_string();
+                    u.auto_start = match AutoStartStatus::from_str(items[1].trim()) {
+                        Ok(x) => x,
+                        Err(_) => AutoStartStatus::Disabled,
+                    };
+                    if items.len() > 2 {
+                        // preset is optionnal ?
+                        u.preset = items[2].trim().ends_with("enabled");
+                    }
+                } else if line.starts_with("masked") {
+                    u.state = State::Masked;
+                }
+            } else if let Some(line) = line.strip_prefix("Transient: ") {
+                if line == "yes" {
+                    u.transient = true
+                }
+            } else if line.starts_with("Active: ") {
+                // skip that one
+                // we already have .active() .inative() methods
+                // to access this information
+            } else if let Some(line) = line.strip_prefix("Docs: ") {
+                is_doc = true;
+                if let Ok(doc) = Doc::from_str(line) {
+                    u.docs.get_or_insert_with(Vec::new).push(doc);
+                }
+            } else if let Some(line) = line.strip_prefix("What: ") {
+                // mountpoint infos
+                u.mounted = Some(line.to_string())
+            } else if let Some(line) = line.strip_prefix("Where: ") {
+                // mountpoint infos
+                u.mountpoint = Some(line.to_string());
+            } else if let Some(line) = line.strip_prefix("Main PID: ") {
+                // example -> Main PID: 787 (gpm)
+                if let Some((pid, proc)) = line.split_once(' ') {
+                    u.pid = Some(pid.parse::<u64>().unwrap_or(0));
+                    u.process = Some(proc.replace(&['(', ')'][..], ""));
+                };
+            } else if let Some(line) = line.strip_prefix("Cntrl PID: ") {
+                // example -> Main PID: 787 (gpm)
+                if let Some((pid, proc)) = line.split_once(' ') {
+                    u.pid = Some(pid.parse::<u64>().unwrap_or(0));
+                    u.process = Some(proc.replace(&['(', ')'][..], ""));
+                };
+            } else if line.starts_with("Process: ") {
+                //TODO: implement
+                //TODO: parse as a Process item
+                //let items : Vec<_> = line.split_ascii_whitespace().collect();
+                //let proc_pid = u64::from_str_radix(items[1].trim(), 10).unwrap();
+                //let cli;
+                //Process: 640 ExecStartPre=/usr/sbin/sshd -t (code=exited, status=0/SUCCESS)
+            } else if line.starts_with("CGroup: ") {
+                //TODO: implement
+                //LINE: "CGroup: /system.slice/sshd.service"
+                //LINE: "└─1050 /usr/sbin/sshd -D"
+            } else if line.starts_with("Tasks: ") {
+                //TODO: implement
+            } else if let Some(line) = line.strip_prefix("Memory: ") {
+                u.memory = Some(line.trim().to_string());
+            } else if let Some(line) = line.strip_prefix("CPU: ") {
+                u.cpu = Some(line.trim().to_string())
+            } else {
+                // handling multi line cases
+                if is_doc {
+                    let line = line.trim_start();
+                    if let Ok(doc) = Doc::from_str(line) {
+                        u.docs.get_or_insert_with(Vec::new).push(doc);
+                    }
+                }
+            }
+        }
+
+        if let Ok(content) = self.cat(name) {
+            let line_tuple = content
+                .lines()
+                .filter_map(|line| line.split_once('=').to_owned());
+            for (k, v) in line_tuple {
+                let val = v.to_string();
+                match k {
+                    "Wants" => u.wants.get_or_insert_with(Vec::new).push(val),
+                    "WantedBy" => u.wanted_by.get_or_insert_with(Vec::new).push(val),
+                    "Also" => u.also.get_or_insert_with(Vec::new).push(val),
+                    "Before" => u.before.get_or_insert_with(Vec::new).push(val),
+                    "After" => u.after.get_or_insert_with(Vec::new).push(val),
+                    "ExecStart" => u.exec_start = Some(val),
+                    "ExecReload" => u.exec_reload = Some(val),
+                    "Restart" => u.restart_policy = Some(val),
+                    "KillMode" => u.kill_mode = Some(val),
+                    _ => {},
+                }
+            }
+        }
+
+        u.active = self.is_active(name)?;
+        u.name = name.to_string();
+        Ok(u)
     }
 }
 
@@ -445,235 +586,24 @@ pub struct Unit {
     pub transient: bool,
 }
 
-// TODO: Remove this lint fix
-#[allow(clippy::if_same_then_else)]
-impl Unit {
-    /// Builds a new `Unit` structure by retrieving
-    /// structure attributes with a `systemctl status $unit` call
-    pub fn from_systemctl(name: &str) -> std::io::Result<Unit> {
-        if let Ok(false) = exists(name) {
-            return Err(Error::new(
-                ErrorKind::NotFound,
-                format!("Unit or service \"{}\" does not exist", name),
-            ));
-        }
-        let mut u = Unit::default();
-        let status = status(name)?;
-        let mut lines = status.lines();
-        let next = lines.next().unwrap();
-        let (_, rem) = next.split_at(3);
-        let mut items = rem.split_ascii_whitespace();
-        let name_raw = items.next().unwrap().trim();
-        if let Some(delim) = items.next() {
-            if delim.trim().eq("-") {
-                // --> description string is provided
-                let items: Vec<_> = items.collect();
-                u.description = Some(itertools::join(&items, " "));
-            }
-        }
-        let (name, utype_raw) = name_raw
-            .rsplit_once('.')
-            .expect("Unit is missing a Type, this should not happen!");
-        // `type` is deduced from .extension
-        u.utype = match Type::from_str(utype_raw) {
-            Ok(t) => t,
-            Err(e) => panic!("For {:?} -> {e}", name_raw),
-        };
-        let mut is_doc = false;
-        for line in lines {
-            let line = line.trim_start();
-            if let Some(line) = line.strip_prefix("Loaded: ") {
-                // Match and get rid of "Loaded: "
-                if let Some(line) = line.strip_prefix("loaded ") {
-                    u.state = State::Loaded;
-                    let line = line.strip_prefix('(').unwrap();
-                    let line = line.strip_suffix(')').unwrap();
-                    let items: Vec<&str> = line.split(';').collect();
-                    u.script = items[0].trim().to_string();
-                    u.auto_start = match AutoStartStatus::from_str(items[1].trim()) {
-                        Ok(x) => x,
-                        Err(_) => AutoStartStatus::Disabled,
-                    };
-                    if items.len() > 2 {
-                        // preset is optionnal ?
-                        u.preset = items[2].trim().ends_with("enabled");
-                    }
-                } else if line.starts_with("masked") {
-                    u.state = State::Masked;
-                }
-            } else if let Some(line) = line.strip_prefix("Transient: ") {
-                if line == "yes" {
-                    u.transient = true
-                }
-            } else if line.starts_with("Active: ") {
-                // skip that one
-                // we already have .active() .inative() methods
-                // to access this information
-            } else if let Some(line) = line.strip_prefix("Docs: ") {
-                is_doc = true;
-                if let Ok(doc) = Doc::from_str(line) {
-                    u.docs.get_or_insert_with(Vec::new).push(doc);
-                }
-            } else if let Some(line) = line.strip_prefix("What: ") {
-                // mountpoint infos
-                u.mounted = Some(line.to_string())
-            } else if let Some(line) = line.strip_prefix("Where: ") {
-                // mountpoint infos
-                u.mountpoint = Some(line.to_string());
-            } else if let Some(line) = line.strip_prefix("Main PID: ") {
-                // example -> Main PID: 787 (gpm)
-                if let Some((pid, proc)) = line.split_once(' ') {
-                    u.pid = Some(pid.parse::<u64>().unwrap_or(0));
-                    u.process = Some(proc.replace(&['(', ')'][..], ""));
-                };
-            } else if let Some(line) = line.strip_prefix("Cntrl PID: ") {
-                // example -> Main PID: 787 (gpm)
-                if let Some((pid, proc)) = line.split_once(' ') {
-                    u.pid = Some(pid.parse::<u64>().unwrap_or(0));
-                    u.process = Some(proc.replace(&['(', ')'][..], ""));
-                };
-            } else if line.starts_with("Process: ") {
-                //TODO: implement
-                //TODO: parse as a Process item
-                //let items : Vec<_> = line.split_ascii_whitespace().collect();
-                //let proc_pid = u64::from_str_radix(items[1].trim(), 10).unwrap();
-                //let cli;
-                //Process: 640 ExecStartPre=/usr/sbin/sshd -t (code=exited, status=0/SUCCESS)
-            } else if line.starts_with("CGroup: ") {
-                //TODO: implement
-                //LINE: "CGroup: /system.slice/sshd.service"
-                //LINE: "└─1050 /usr/sbin/sshd -D"
-            } else if line.starts_with("Tasks: ") {
-                //TODO: implement
-            } else if let Some(line) = line.strip_prefix("Memory: ") {
-                u.memory = Some(line.trim().to_string());
-            } else if let Some(line) = line.strip_prefix("CPU: ") {
-                u.cpu = Some(line.trim().to_string())
-            } else {
-                // handling multi line cases
-                if is_doc {
-                    let line = line.trim_start();
-                    if let Ok(doc) = Doc::from_str(line) {
-                        u.docs.get_or_insert_with(Vec::new).push(doc);
-                    }
-                }
-            }
-        }
-
-        if let Ok(content) = cat(name) {
-            let line_tuple = content
-                .lines()
-                .filter_map(|line| line.split_once('=').to_owned());
-            for (k, v) in line_tuple {
-                let val = v.to_string();
-                match k {
-                    "Wants" => u.wants.get_or_insert_with(Vec::new).push(val),
-                    "WantedBy" => u.wanted_by.get_or_insert_with(Vec::new).push(val),
-                    "Also" => u.also.get_or_insert_with(Vec::new).push(val),
-                    "Before" => u.before.get_or_insert_with(Vec::new).push(val),
-                    "After" => u.after.get_or_insert_with(Vec::new).push(val),
-                    "ExecStart" => u.exec_start = Some(val),
-                    "ExecReload" => u.exec_reload = Some(val),
-                    "Restart" => u.restart_policy = Some(val),
-                    "KillMode" => u.kill_mode = Some(val),
-                    _ => {},
-                }
-                // }
-            }
-        }
-
-        u.active = is_active(name)?;
-        u.name = name.to_string();
-        Ok(u)
-    }
-
-    /// Restarts Self by invoking `systemctl`
-    pub fn restart(&self) -> std::io::Result<ExitStatus> {
-        restart(&self.name)
-    }
-
-    /// Starts Self by invoking `systemctl`
-    pub fn start(&self) -> std::io::Result<ExitStatus> {
-        start(&self.name)
-    }
-
-    /// Stops Self by invoking `systemctl`
-    pub fn stop(&self) -> std::io::Result<ExitStatus> {
-        stop(&self.name)
-    }
-
-    /// Reloads Self by invoking systemctl
-    pub fn reload(&self) -> std::io::Result<ExitStatus> {
-        reload(&self.name)
-    }
-
-    /// Reloads or restarts Self by invoking systemctl
-    pub fn reload_or_restart(&self) -> std::io::Result<ExitStatus> {
-        reload_or_restart(&self.name)
-    }
-
-    /// Enable Self to start at boot
-    pub fn enable(&self) -> std::io::Result<ExitStatus> {
-        enable(&self.name)
-    }
-
-    /// Disable Self to start at boot
-    pub fn disable(&self) -> std::io::Result<ExitStatus> {
-        disable(&self.name)
-    }
-
-    /// Returns verbose status for Self
-    pub fn status(&self) -> std::io::Result<String> {
-        status(&self.name)
-    }
-
-    /// Returns `true` if Self is actively running
-    pub fn is_active(&self) -> std::io::Result<bool> {
-        is_active(&self.name)
-    }
-
-    /// `Isolate` Self, meaning stops all other units but
-    /// self and its dependencies
-    pub fn isolate(&self) -> std::io::Result<ExitStatus> {
-        isolate(&self.name)
-    }
-
-    /// `Freezes` Self, halts self and CPU load will
-    /// no longer be dedicated to its execution.
-    /// This operation might not be feasible.
-    /// `unfreeze()` is the mirror operation
-    pub fn freeze(&self) -> std::io::Result<ExitStatus> {
-        freeze(&self.name)
-    }
-
-    /// `Unfreezes` Self, exists halted state.
-    /// This operation might not be feasible.
-    pub fn unfreeze(&self) -> std::io::Result<ExitStatus> {
-        unfreeze(&self.name)
-    }
-
-    /// Returns `true` if given `unit` exists,
-    /// ie., service could be or is actively deployed
-    /// and manageable by systemd
-    pub fn exists(&self) -> std::io::Result<bool> {
-        exists(&self.name)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
 
+    fn ctl() -> SystemCtl {
+        SystemCtl::default()
+    }
+
     #[test]
     fn test_status_success() {
-        let status = status("cron");
+        let status = ctl().status("cron");
         println!("cron status: {:#?}", status);
         assert!(status.is_ok());
     }
 
     #[test]
     fn test_status_failure() {
-        let status = status("not-existing");
+        let status = ctl().status("not-existing");
         println!("not-existing status: {:#?}", status);
         assert!(status.is_err());
         let result = status.map_err(|e| e.kind());
@@ -683,16 +613,17 @@ mod test {
 
     #[test]
     fn test_is_active() {
-        let units = vec!["sshd", "dropbear", "ntpd"];
+        let units = ["sshd", "dropbear", "ntpd"];
+        let ctl = ctl();
         for u in units {
-            let active = is_active(u);
+            let active = ctl.is_active(u);
             println!("{} is-active: {:#?}", u, active);
             assert!(active.is_ok());
         }
     }
     #[test]
     fn test_service_exists() {
-        let units = vec![
+        let units = [
             "sshd",
             "dropbear",
             "ntpd",
@@ -700,25 +631,26 @@ mod test {
             "non-existing",
             "dummy",
         ];
+        let ctl = ctl();
         for u in units {
-            let ex = exists(u);
+            let ex = ctl.exists(u);
             println!("{} exists: {:#?}", u, ex);
             assert!(ex.is_ok());
         }
     }
     #[test]
     fn test_disabled_services() {
-        let services = list_disabled_services().unwrap();
+        let services = ctl().list_disabled_services().unwrap();
         println!("disabled services: {:#?}", services)
     }
     #[test]
     fn test_enabled_services() {
-        let services = list_enabled_services().unwrap();
+        let services = ctl().list_enabled_services().unwrap();
         println!("enabled services: {:#?}", services)
     }
     #[test]
     fn test_non_existing_unit() {
-        let unit = Unit::from_systemctl("non-existing");
+        let unit = ctl().create_unit("non-existing");
         assert!(unit.is_err());
         let result = unit.map_err(|e| e.kind());
         let expected = Err(ErrorKind::NotFound);
@@ -727,14 +659,14 @@ mod test {
 
     #[test]
     fn test_systemctl_exitcode_success() {
-        let u = Unit::from_systemctl("cron.service");
+        let u = ctl().create_unit("cron.service");
         println!("{:#?}", u);
         assert!(u.is_ok());
     }
 
     #[test]
     fn test_systemctl_exitcode_not_found() {
-        let u = Unit::from_systemctl("cran.service");
+        let u = ctl().create_unit("cran.service");
         println!("{:#?}", u);
         assert!(u.is_err());
         let result = u.map_err(|e| e.kind());
@@ -744,7 +676,8 @@ mod test {
 
     #[test]
     fn test_service_unit_construction() {
-        let units = list_units(None, None, None).unwrap(); // all units
+        let ctl = ctl();
+        let units = ctl.list_units(None, None, None).unwrap(); // all units
         for unit in units {
             let unit = unit.as_str();
             if unit.contains('@') {
@@ -755,7 +688,7 @@ mod test {
             let c0 = unit.chars().next().unwrap();
             if c0.is_alphanumeric() {
                 // valid unit name --> run test
-                let u = Unit::from_systemctl(unit).unwrap();
+                let u = ctl.create_unit(unit).unwrap();
                 println!("####################################");
                 println!("Unit: {:#?}", u);
                 println!("active: {}", u.active);
@@ -771,7 +704,7 @@ mod test {
     }
     #[test]
     fn test_list_units_full() {
-        let units = list_units_full(None, None, None).unwrap(); // all units
+        let units = ctl().list_units_full(None, None, None).unwrap(); // all units
         for unit in units {
             println!("####################################");
             println!("Unit: {}", unit.unit_file);
