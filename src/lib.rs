@@ -12,8 +12,25 @@ const SYSTEMCTL_PATH: &str = "/usr/bin/systemctl";
 
 /// Invokes `systemctl $args`
 fn spawn_child(args: Vec<&str>) -> std::io::Result<Child> {
+    #[cfg(feature="args")]
+    let new_args: Vec<String> = if let Ok(env_args) = std::env::var("SYSTEMCTL_ARGS") {
+        if let Some(mut env_args) = shlex::split(&env_args) {
+            for original_arg in args.into_iter().map(|s| s.to_string()) {
+                env_args.push(original_arg);
+            }
+            env_args
+        } else {
+            args.into_iter().map(|s| s.to_string()).collect()
+        }
+    } else {
+        args.into_iter().map(|s| s.to_string()).collect()
+    };
+
+    #[cfg(not(feature="args"))]
+    let new_args: Vec<&str> = args;
+    
     std::process::Command::new(std::env::var("SYSTEMCTL_PATH").unwrap_or(SYSTEMCTL_PATH.into()))
-        .args(args)
+        .args(new_args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()
