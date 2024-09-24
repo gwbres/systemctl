@@ -10,206 +10,225 @@ use serde::{Deserialize, Serialize};
 
 const SYSTEMCTL_PATH: &str = "/usr/bin/systemctl";
 
-/// Invokes `systemctl $args`
-fn spawn_child(args: Vec<&str>) -> std::io::Result<Child> {
-    #[cfg(feature="args")]
-    let new_args: Vec<String> = if let Ok(env_args) = std::env::var("SYSTEMCTL_ARGS") {
-        if let Some(mut env_args) = shlex::split(&env_args) {
-            for original_arg in args.into_iter().map(|s| s.to_string()) {
-                env_args.push(original_arg);
+use bon::Builder;
+
+#[derive(Builder)]
+struct SystemCtl {
+    aditional_args: Vec<String>,
+    path: Option<String>
+}
+
+impl SystemCtl {
+    /// Invokes `systemctl $args`
+    fn spawn_child(&self, args: Vec<&str>) -> std::io::Result<Child> {
+        std::process::Command::new(self.get_path())
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+    }
+    fn get_path(&self) -> &str {
+        self.path.as_ref().map(|s| s.as_str()).unwrap_or(SYSTEMCTL_PATH)
+    }
+    /// Invokes `systemctl $args` silently
+    fn systemctl(&self, args: Vec<&str>) -> std::io::Result<ExitStatus> {
+        self.spawn_child(args)?.wait()
+    }
+    /// Invokes `systemctl $args` and captures stdout stream
+    fn systemctl_capture(&self, args: Vec<&str>) -> std::io::Result<String> {
+        let mut child = self.spawn_child(args)?;
+        match child.wait()?.code() {
+            Some(code) if code == 0 => {}, // success
+            Some(code) if code == 1 => {}, // success -> Ok(Unit not found)
+            Some(code) if code == 3 => {}, // success -> Ok(unit is inactive and/or dead)
+            Some(code) if code == 4 => {
+                return Err(Error::new(
+                    ErrorKind::PermissionDenied,
+                    "Missing Priviledges or Unit not found",
+                ))
+            },
+            // unknown errorcodes
+            Some(code) => {
+                return Err(Error::new(
+                    // TODO: Maybe a better ErrorKind, none really seem to fit
+                    ErrorKind::Other,
+                    format!("Process exited with code: {code}"),
+                ));
+            },
+            None => {
+                return Err(Error::new(
+                    ErrorKind::Interrupted,
+                    "Process terminated by signal",
+                ))
+            },
+        }
+
+        let mut stdout: Vec<u8> = Vec::new();
+        let size = child.stdout.unwrap().read_to_end(&mut stdout)?;
+
+        if size > 0 {
+            if let Ok(s) = String::from_utf8(stdout) {
+                return Ok(s);
+            } else {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "Invalid utf8 data in stdout",
+                ));
             }
-            env_args
-        } else {
-            args.into_iter().map(|s| s.to_string()).collect()
         }
-    } else {
-        args.into_iter().map(|s| s.to_string()).collect()
-    };
 
-    #[cfg(not(feature="args"))]
-    let new_args: Vec<&str> = args;
-    
-    std::process::Command::new(std::env::var("SYSTEMCTL_PATH").unwrap_or(SYSTEMCTL_PATH.into()))
-        .args(new_args)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-}
-
-/// Invokes `systemctl $args` silently
-fn systemctl(args: Vec<&str>) -> std::io::Result<ExitStatus> {
-    spawn_child(args)?.wait()
-}
-
-/// Invokes `systemctl $args` and captures stdout stream
-fn systemctl_capture(args: Vec<&str>) -> std::io::Result<String> {
-    let mut child = spawn_child(args)?;
-    match child.wait()?.code() {
-        Some(code) if code == 0 => {}, // success
-        Some(code) if code == 1 => {}, // success -> Ok(Unit not found)
-        Some(code) if code == 3 => {}, // success -> Ok(unit is inactive and/or dead)
-        Some(code) if code == 4 => {
-            return Err(Error::new(
-                ErrorKind::PermissionDenied,
-                "Missing Priviledges or Unit not found",
-            ))
-        },
-        // unknown errorcodes
-        Some(code) => {
-            return Err(Error::new(
-                // TODO: Maybe a better ErrorKind, none really seem to fit
-                ErrorKind::Other,
-                format!("Process exited with code: {code}"),
-            ));
-        },
-        None => {
-            return Err(Error::new(
-                ErrorKind::Interrupted,
-                "Process terminated by signal",
-            ))
-        },
+        // if this is reached all if's above did not work
+        Err(Error::new(
+            ErrorKind::UnexpectedEof,
+            "systemctl stdout empty",
+        ))
     }
 
-    let mut stdout: Vec<u8> = Vec::new();
-    let size = child.stdout.unwrap().read_to_end(&mut stdout)?;
+    /// Forces given `unit` to (re)start
+    pub fn restart(&self, unit: &str) -> std::io::Result<ExitStatus> {
+        self.systemctl(vec!["restart", unit])
+    }
 
-    if size > 0 {
-        if let Ok(s) = String::from_utf8(stdout) {
-            return Ok(s);
-        } else {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Invalid utf8 data in stdout",
-            ));
+    /// Forces given `unit` to start
+    pub fn start(&self, unit: &str) -> std::io::Result<ExitStatus> {
+        self.systemctl(vec!["start", unit])
+    }
+
+    /// Forces given `unit` to stop
+    pub fn stop(&self, unit: &str) -> std::io::Result<ExitStatus> {
+        self.systemctl(vec!["stop", unit])
+    }
+
+    /// Triggers reload for given `unit`
+    pub fn reload(&self, unit: &str) -> std::io::Result<ExitStatus> {
+        self.systemctl(vec!["reload", unit])
+    }
+
+    /// Triggers reload or restarts given `unit`
+    pub fn reload_or_restart(&self, unit: &str) -> std::io::Result<ExitStatus> {
+        self.systemctl(vec!["reload-or-restart", unit])
+    }
+
+    /// Enable given `unit` to start at boot
+    pub fn enable(&self, unit: &str) -> std::io::Result<ExitStatus> {
+        self.systemctl(vec!["enable", unit])
+    }
+
+    /// Disable given `unit` to start at boot
+    pub fn disable(&self, unit: &str) -> std::io::Result<ExitStatus> {
+        self.systemctl(vec!["disable", unit])
+    }
+
+    /// Returns raw status from `systemctl status $unit` call
+    pub fn status(&self, unit: &str) -> std::io::Result<String> {
+        self.systemctl_capture(vec!["status", unit])
+    }
+
+    /// Invokes systemctl `cat` on given `unit`
+    pub fn cat(&self, unit: &str) -> std::io::Result<String> {
+        self.systemctl_capture(vec!["cat", unit])
+    }
+
+    /// Returns `true` if given `unit` is actively running
+    pub fn is_active(&self, unit: &str) -> std::io::Result<bool> {
+        let status = self.systemctl_capture(vec!["is-active", unit])?;
+        Ok(status.trim_end().eq("active"))
+    }
+
+    /// Isolates given unit, only self and its dependencies are
+    /// now actively running
+    pub fn isolate(&self, unit: &str) -> std::io::Result<ExitStatus> {
+        self.systemctl(vec!["isolate", unit])
+    }
+
+    /// Freezes (halts) given unit.
+    /// This operation might not be feasible.
+    pub fn freeze(&self, unit: &str) -> std::io::Result<ExitStatus> {
+        self.systemctl(vec!["freeze", unit])
+    }
+
+    /// Unfreezes given unit (recover from halted state).
+    /// This operation might not be feasible.
+    pub fn unfreeze(&self, unit: &str) -> std::io::Result<ExitStatus> {
+        self.systemctl(vec!["thaw", unit])
+    }
+
+    /// Returns `true` if given `unit` exists,
+    /// ie., service could be or is actively deployed
+    /// and manageable by systemd
+    pub fn exists(&self, unit: &str) -> std::io::Result<bool> {
+        let unit_list = self.list_units(None, None, Some(unit))?;
+        Ok(!unit_list.is_empty())
+    }
+
+    /// Returns a `Vector` of `UnitList` structs extracted from systemctl listing.   
+    ///  + type filter: optional `--type` filter
+    ///  + state filter: optional `--state` filter
+    ///  + glob filter: optional unit name filter
+    pub fn list_units_full(
+        &self, 
+        type_filter: Option<&str>,
+        state_filter: Option<&str>,
+        glob: Option<&str>,
+    ) -> std::io::Result<Vec<UnitList>> {
+        let mut args = vec!["list-unit-files"];
+        if let Some(filter) = type_filter {
+            args.push("--type");
+            args.push(filter)
         }
+        if let Some(filter) = state_filter {
+            args.push("--state");
+            args.push(filter)
+        }
+        if let Some(glob) = glob {
+            args.push(glob)
+        }
+        let mut result: Vec<UnitList> = Vec::new();
+        let content = self.systemctl_capture(args)?;
+        let lines = content
+            .lines()
+            .filter(|line| line.contains('.') && !line.ends_with('.'));
+
+        for l in lines {
+            let parsed: Vec<&str> = l.split_ascii_whitespace().collect();
+            let vendor_preset = match parsed[2] {
+                "-" => None,
+                "enabled" => Some(true),
+                "disabled" => Some(false),
+                _ => None,
+            };
+            result.push(UnitList {
+                unit_file: parsed[0].to_string(),
+                state: parsed[1].to_string(),
+                vendor_preset,
+            })
+        }
+        Ok(result)
     }
 
-    // if this is reached all if's above did not work
-    Err(Error::new(
-        ErrorKind::UnexpectedEof,
-        "systemctl stdout empty",
-    ))
-}
-
-/// Forces given `unit` to (re)start
-pub fn restart(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["restart", unit])
-}
-
-/// Forces given `unit` to start
-pub fn start(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["start", unit])
-}
-
-/// Forces given `unit` to stop
-pub fn stop(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["stop", unit])
-}
-
-/// Triggers reload for given `unit`
-pub fn reload(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["reload", unit])
-}
-
-/// Triggers reload or restarts given `unit`
-pub fn reload_or_restart(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["reload-or-restart", unit])
-}
-
-/// Enable given `unit` to start at boot
-pub fn enable(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["enable", unit])
-}
-
-/// Disable given `unit` to start at boot
-pub fn disable(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["disable", unit])
-}
-
-/// Returns raw status from `systemctl status $unit` call
-pub fn status(unit: &str) -> std::io::Result<String> {
-    systemctl_capture(vec!["status", unit])
-}
-
-/// Invokes systemctl `cat` on given `unit`
-pub fn cat(unit: &str) -> std::io::Result<String> {
-    systemctl_capture(vec!["cat", unit])
-}
-
-/// Returns `true` if given `unit` is actively running
-pub fn is_active(unit: &str) -> std::io::Result<bool> {
-    let status = systemctl_capture(vec!["is-active", unit])?;
-    Ok(status.trim_end().eq("active"))
-}
-
-/// Isolates given unit, only self and its dependencies are
-/// now actively running
-pub fn isolate(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["isolate", unit])
-}
-
-/// Freezes (halts) given unit.
-/// This operation might not be feasible.
-pub fn freeze(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["freeze", unit])
-}
-
-/// Unfreezes given unit (recover from halted state).
-/// This operation might not be feasible.
-pub fn unfreeze(unit: &str) -> std::io::Result<ExitStatus> {
-    systemctl(vec!["thaw", unit])
-}
-
-/// Returns `true` if given `unit` exists,
-/// ie., service could be or is actively deployed
-/// and manageable by systemd
-pub fn exists(unit: &str) -> std::io::Result<bool> {
-    let unit_list = list_units(None, None, Some(unit))?;
-    Ok(!unit_list.is_empty())
-}
-
-/// Returns a `Vector` of `UnitList` structs extracted from systemctl listing.   
-///  + type filter: optional `--type` filter
-///  + state filter: optional `--state` filter
-///  + glob filter: optional unit name filter
-pub fn list_units_full(
-    type_filter: Option<&str>,
-    state_filter: Option<&str>,
-    glob: Option<&str>,
-) -> std::io::Result<Vec<UnitList>> {
-    let mut args = vec!["list-unit-files"];
-    if let Some(filter) = type_filter {
-        args.push("--type");
-        args.push(filter)
+    /// Returns a `Vector` of unit names extracted from systemctl listing.   
+    ///  + type filter: optional `--type` filter
+    ///  + state filter: optional `--state` filter
+    ///  + glob filter: optional unit name filter
+    pub fn list_units(
+        &self,
+        type_filter: Option<&str>,
+        state_filter: Option<&str>,
+        glob: Option<&str>,
+    ) -> std::io::Result<Vec<String>> {
+        let list = self.list_units_full(type_filter, state_filter, glob);
+        Ok(list?.iter().map(|n| n.unit_file.clone()).collect())
     }
-    if let Some(filter) = state_filter {
-        args.push("--state");
-        args.push(filter)
-    }
-    if let Some(glob) = glob {
-        args.push(glob)
-    }
-    let mut result: Vec<UnitList> = Vec::new();
-    let content = systemctl_capture(args)?;
-    let lines = content
-        .lines()
-        .filter(|line| line.contains('.') && !line.ends_with('.'));
 
-    for l in lines {
-        let parsed: Vec<&str> = l.split_ascii_whitespace().collect();
-        let vendor_preset = match parsed[2] {
-            "-" => None,
-            "enabled" => Some(true),
-            "disabled" => Some(false),
-            _ => None,
-        };
-        result.push(UnitList {
-            unit_file: parsed[0].to_string(),
-            state: parsed[1].to_string(),
-            vendor_preset,
-        })
+    /// Returns list of services that are currently declared as disabled
+    pub fn list_disabled_services(&self) -> std::io::Result<Vec<String>> {
+        self.list_units(Some("service"), Some("disabled"), None)
     }
-    Ok(result)
+
+    /// Returns list of services that are currently declared as enabled
+    pub fn list_enabled_services(&self) -> std::io::Result<Vec<String>> {
+        self.list_units(Some("service"), Some("enabled"), None)
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -225,28 +244,6 @@ pub struct UnitList {
     pub vendor_preset: Option<bool>,
 }
 
-/// Returns a `Vector` of unit names extracted from systemctl listing.   
-///  + type filter: optional `--type` filter
-///  + state filter: optional `--state` filter
-///  + glob filter: optional unit name filter
-pub fn list_units(
-    type_filter: Option<&str>,
-    state_filter: Option<&str>,
-    glob: Option<&str>,
-) -> std::io::Result<Vec<String>> {
-    let list = list_units_full(type_filter, state_filter, glob);
-    Ok(list?.iter().map(|n| n.unit_file.clone()).collect())
-}
-
-/// Returns list of services that are currently declared as disabled
-pub fn list_disabled_services() -> std::io::Result<Vec<String>> {
-    list_units(Some("service"), Some("disabled"), None)
-}
-
-/// Returns list of services that are currently declared as enabled
-pub fn list_enabled_services() -> std::io::Result<Vec<String>> {
-    list_units(Some("service"), Some("enabled"), None)
-}
 
 /// `AutoStartStatus` describes the Unit current state
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
