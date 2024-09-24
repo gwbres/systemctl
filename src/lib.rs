@@ -12,9 +12,16 @@ const SYSTEMCTL_PATH: &str = "/usr/bin/systemctl";
 
 use bon::Builder;
 
+/// Struct with API calls to systemctl.
+/// 
+/// Use the `::default()` impl if you don't need special arguments.
+/// 
+/// Use the builder API when you want to specify a custom path to systemctl binary or extra args.
 #[derive(Builder, Default, Clone, Debug)]
 pub struct SystemCtl {
+    /// Allows passing global arguments to systemctl like `--user`.
     additional_args: Vec<String>,
+    /// The path to the systemctl binary, by default it's [SYSTEMCTL_PATH]
     path: Option<String>
 }
 
@@ -29,7 +36,7 @@ impl SystemCtl {
     }
 
     fn get_path(&self) -> &str {
-        self.path.as_ref().map(|s| s.as_str()).unwrap_or(SYSTEMCTL_PATH)
+        self.path.as_deref().unwrap_or(SYSTEMCTL_PATH)
     }
 
     /// Invokes `systemctl $args` silently
@@ -41,10 +48,10 @@ impl SystemCtl {
     fn systemctl_capture<'a, 's: 'a, S: IntoIterator<Item = &'a str>>(&'s self, args: S) -> std::io::Result<String> {
         let mut child = self.spawn_child(args)?;
         match child.wait()?.code() {
-            Some(code) if code == 0 => {}, // success
-            Some(code) if code == 1 => {}, // success -> Ok(Unit not found)
-            Some(code) if code == 3 => {}, // success -> Ok(unit is inactive and/or dead)
-            Some(code) if code == 4 => {
+            Some(0) => {}, // success
+            Some(1) => {}, // success -> Ok(Unit not found)
+            Some(3) => {}, // success -> Ok(unit is inactive and/or dead)
+            Some(4) => {
                 return Err(Error::new(
                     ErrorKind::PermissionDenied,
                     "Missing Priviledges or Unit not found",
