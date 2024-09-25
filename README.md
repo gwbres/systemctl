@@ -17,28 +17,19 @@ Small rust crate to interact with systemd units
 
 Currently SystemD Version <245 are not supported as unit-file-list changed from two column to three column setup. See: [SystemD Changelog](https://github.com/systemd/systemd/blob/16bfb12c8f815a468021b6e20871061d20b50f57/NEWS#L6073)
 
-## Environment
-
-`SYSTEMCTL_PATH` custom env. variable describes the absolute
-location path of `systemctl` binary, by default this crate uses `/usr/bin/systemctl`,
-but that can be customized:
-
-```shell
-SYSTEMCTL_PATH=/home/$me/bin/systemctl cargo build
-```
-
 ## Unit / service operation
 
 Nominal service operations:
 
 ```rust
-systemctl::stop("systemd-journald.service")
+let systemctl = systemctl::SystemCtl::default();
+systemctl.stop("systemd-journald.service")
     .unwrap();
-systemctl::restart("systemd-journald.service")
+systemctl.restart("systemd-journald.service")
     .unwrap();
 
-if let Ok(true) = systemctl::exists("ntpd") {
-    let is_active = systemctl::is_active("ntpd")
+if let Ok(true) = systemctl.exists("ntpd") {
+    let is_active = systemctl.is_active("ntpd")
         .unwrap();
 }
 ```
@@ -46,20 +37,20 @@ if let Ok(true) = systemctl::exists("ntpd") {
 ## Service enumeration
 
 ```rust
-use systemctl;
+let systemctl = systemctl::SystemCtl::default();
 // list all units
-systemctl::list_units(None, None, None);
+systemctl.list_units(None, None, None);
 
 // list all services 
 // by adding a --type filter
-systemctl::list_units(Some("service"), None, None);
+systemctl.list_units(Some("service"), None, None);
 
 // list all services currently `enabled` 
 // by adding a --state filter
-systemctl::list_units(Some("service"), Some("enabled"), None);
+systemctl.list_units(Some("service"), Some("enabled"), None);
 
 // list all services starting with cron
-systemctl::list_units(Some("service"), None, Some("cron*"));
+systemctl.list_units(Some("service"), None, Some("cron*"));
 ```
 
 ## Unit structure
@@ -67,9 +58,10 @@ systemctl::list_units(Some("service"), None, Some("cron*"));
 Use the unit structure for more information
 
 ```rust
-let unit = systemctl::Unit::from_systemctl("sshd")
+let systemctl = systemctl::SystemCtl::default();
+let unit = systemctl.create_unit("ssh.service")
     .unwrap();
-unit.restart().unwrap();
+systemctl.restart(&unit.name).unwrap();
 println!("active: {}", unit.active);
 println!("preset: {}", unit.preset);
 
@@ -84,11 +76,11 @@ if let Some(docs) = unit.docs { // doc pages available
     }
 }
 
-println!("auto_start (enabled): {}", unit.auto_start);
+println!("auto_start (enabled): {:?}", unit.auto_start);
 println!("config script : {}", unit.script);
-println!("pid: {}", unit.pid);
-println!("Running task(s): {}", unit.tasks.unwrap());
-println!("Memory consumption: {}", unit.memory.unwrap());
+println!("pid: {:?}", unit.pid);
+println!("Running task(s): {:?}", unit.tasks);
+println!("Memory consumption: {:?}", unit.memory);
 ```
 
 ## TODO
