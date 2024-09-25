@@ -13,21 +13,24 @@ const SYSTEMCTL_PATH: &str = "/usr/bin/systemctl";
 use bon::Builder;
 
 /// Struct with API calls to systemctl.
-/// 
+///
 /// Use the `::default()` impl if you don't need special arguments.
-/// 
+///
 /// Use the builder API when you want to specify a custom path to systemctl binary or extra args.
 #[derive(Builder, Default, Clone, Debug)]
 pub struct SystemCtl {
     /// Allows passing global arguments to systemctl like `--user`.
     additional_args: Vec<String>,
     /// The path to the systemctl binary, by default it's [SYSTEMCTL_PATH]
-    path: Option<String>
+    path: Option<String>,
 }
 
 impl SystemCtl {
     /// Invokes `systemctl $args`
-    fn spawn_child<'a, 's: 'a, S: IntoIterator<Item = &'a str>>(&'s self, args: S) -> std::io::Result<Child> {
+    fn spawn_child<'a, 's: 'a, S: IntoIterator<Item = &'a str>>(
+        &'s self,
+        args: S,
+    ) -> std::io::Result<Child> {
         std::process::Command::new(self.get_path())
             .args(self.additional_args.iter().map(String::as_str).chain(args))
             .stdout(std::process::Stdio::piped())
@@ -40,12 +43,18 @@ impl SystemCtl {
     }
 
     /// Invokes `systemctl $args` silently
-    fn systemctl<'a, 's: 'a, S: IntoIterator<Item = &'a str>>(&'s self, args: S) -> std::io::Result<ExitStatus> {
+    fn systemctl<'a, 's: 'a, S: IntoIterator<Item = &'a str>>(
+        &'s self,
+        args: S,
+    ) -> std::io::Result<ExitStatus> {
         self.spawn_child(args)?.wait()
     }
 
     /// Invokes `systemctl $args` and captures stdout stream
-    fn systemctl_capture<'a, 's: 'a, S: IntoIterator<Item = &'a str>>(&'s self, args: S) -> std::io::Result<String> {
+    fn systemctl_capture<'a, 's: 'a, S: IntoIterator<Item = &'a str>>(
+        &'s self,
+        args: S,
+    ) -> std::io::Result<String> {
         let mut child = self.spawn_child(args)?;
         match child.wait()?.code() {
             Some(0) => {}, // success
@@ -176,7 +185,7 @@ impl SystemCtl {
     ///  + state filter: optional `--state` filter
     ///  + glob filter: optional unit name filter
     pub fn list_units_full(
-        &self, 
+        &self,
         type_filter: Option<&str>,
         state_filter: Option<&str>,
         glob: Option<&str>,
@@ -391,7 +400,6 @@ pub struct UnitList {
     /// Unit vendor preset
     pub vendor_preset: Option<bool>,
 }
-
 
 /// `AutoStartStatus` describes the Unit current state
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
