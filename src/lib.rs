@@ -1,5 +1,6 @@
 //! Crate to manage and monitor services through `systemctl`   
 //! Homepage: <https://github.com/gwbres/systemctl>
+#![doc=include_str!("../README.md")] 
 use std::io::{Error, ErrorKind, Read};
 use std::process::{Child, ExitStatus};
 use std::str::FromStr;
