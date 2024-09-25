@@ -103,6 +103,11 @@ impl SystemCtl {
         ))
     }
 
+    /// Reloads all unit files
+    pub fn daemon_reload(&self) -> std::io::Result<ExitStatus> {
+        self.systemctl(["daemon-reload"])
+    }
+
     /// Forces given `unit` to (re)start
     pub fn restart(&self, unit: &str) -> std::io::Result<ExitStatus> {
         self.systemctl(["restart", unit])
