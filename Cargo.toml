@@ -1,6 +1,6 @@
 [package]
 name = "systemctl"
-version = "0.3.1"
+version = "0.4.0"
 license = "MIT OR Apache-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Small crate to interact with systemd units"
@@ -13,10 +13,11 @@ default = []
 serde = ["dep:serde"]
 
 [dependencies]
-strum = "0.25"
-strum_macros = "0.25"
-itertools = "0.11"
+strum = "0.26"
+strum_macros = "0.26"
+itertools = "0.13"
 serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
+bon="2.3"
 
 [dev-dependencies]
 serde_json = "1.0"
