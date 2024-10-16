@@ -182,7 +182,7 @@ impl SystemCtl {
     /// ie., service could be or is actively deployed
     /// and manageable by systemd
     pub fn exists(&self, unit: &str) -> std::io::Result<bool> {
-        let unit_list = self.list_units(None, None, Some(unit))?;
+        let unit_list = self.list_unit_files(None, None, Some(unit))?;
         Ok(!unit_list.is_empty())
     }
 
@@ -190,7 +190,7 @@ impl SystemCtl {
     ///  + type filter: optional `--type` filter
     ///  + state filter: optional `--state` filter
     ///  + glob filter: optional unit name filter
-    pub fn list_units_full(
+    pub fn list_unit_files_full(
         &self,
         type_filter: Option<&str>,
         state_filter: Option<&str>,
@@ -231,6 +231,69 @@ impl SystemCtl {
         Ok(result)
     }
 
+    /// Returns a `Vector` of `UnitService` structs extracted from systemctl listing.   
+    ///  + type filter: optional `--type` filter
+    ///  + state filter: optional `--state` filter
+    ///  + glob filter: optional unit name filter
+    pub fn list_units_full(
+        &self,
+        type_filter: Option<&str>,
+        state_filter: Option<&str>,
+        glob: Option<&str>,
+    ) -> std::io::Result<Vec<UnitService>> {
+        let mut args = vec!["list-units"];
+        if let Some(filter) = type_filter {
+            args.push("--type");
+            args.push(filter)
+        }
+        if let Some(filter) = state_filter {
+            args.push("--state");
+            args.push(filter)
+        }
+        if let Some(glob) = glob {
+            args.push(glob)
+        }
+        let mut result: Vec<UnitService> = Vec::new();
+        let content = self.systemctl_capture(args.clone())?;
+
+        let lines = content
+            .lines()
+            .filter(|line| line.contains('.') && !line.ends_with('.'));
+
+        for l in lines {
+            let parsed: Vec<&str> = l.split_ascii_whitespace().collect();
+
+            let description = parsed
+                .split_at(4)
+                .1
+                .iter()
+                .fold("".to_owned(), |acc, str| format!("{} {}", acc, str));
+
+            result.push(UnitService {
+                unit_name: parsed[0].to_string(),
+                loaded: parsed[1].to_string(),
+                state: parsed[2].to_string(),
+                sub_state: parsed[3].to_string(),
+                description,
+            })
+        }
+        Ok(result)
+    }
+
+    /// Returns a `Vector` of unit names extracted from systemctl listing.   
+    ///  + type filter: optional `--type` filter
+    ///  + state filter: optional `--state` filter
+    ///  + glob filter: optional unit name filter
+    pub fn list_unit_files(
+        &self,
+        type_filter: Option<&str>,
+        state_filter: Option<&str>,
+        glob: Option<&str>,
+    ) -> std::io::Result<Vec<String>> {
+        let list = self.list_unit_files_full(type_filter, state_filter, glob);
+        Ok(list?.iter().map(|n| n.unit_file.clone()).collect())
+    }
+
     /// Returns a `Vector` of unit names extracted from systemctl listing.   
     ///  + type filter: optional `--type` filter
     ///  + state filter: optional `--state` filter
@@ -242,17 +305,27 @@ impl SystemCtl {
         glob: Option<&str>,
     ) -> std::io::Result<Vec<String>> {
         let list = self.list_units_full(type_filter, state_filter, glob);
-        Ok(list?.iter().map(|n| n.unit_file.clone()).collect())
+        Ok(list?.iter().map(|n| n.unit_name.clone()).collect())
+    }
+
+    /// Returns list of services that are currently declared as running
+    pub fn list_running_services(&self) -> std::io::Result<Vec<String>> {
+        self.list_units(Some("service"), Some("running"), None)
+    }
+
+    /// Returns list of services that are currently declared as failed
+    pub fn list_failed_services(&self) -> std::io::Result<Vec<String>> {
+        self.list_units(Some("service"), Some("failed"), None)
     }
 
     /// Returns list of services that are currently declared as disabled
     pub fn list_disabled_services(&self) -> std::io::Result<Vec<String>> {
-        self.list_units(Some("service"), Some("disabled"), None)
+        self.list_unit_files(Some("service"), Some("disabled"), None)
     }
 
     /// Returns list of services that are currently declared as enabled
     pub fn list_enabled_services(&self) -> std::io::Result<Vec<String>> {
-        self.list_units(Some("service"), Some("enabled"), None)
+        self.list_unit_files(Some("service"), Some("enabled"), None)
     }
 
     /// Builds a new `Unit` structure by retrieving
@@ -405,6 +478,23 @@ pub struct UnitList {
     pub state: String,
     /// Unit vendor preset
     pub vendor_preset: Option<bool>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+/// Implementation of list generated with
+/// `systemctl list-units`
+pub struct UnitService {
+    /// Unit name: `name.type`
+    pub unit_name: String,
+    /// Loaded state
+    pub loaded: String,
+    /// Unit state
+    pub state: String,
+    /// Unit substate
+    pub sub_state: String,
+    /// Unit description
+    pub description: String,
 }
 
 /// `AutoStartStatus` describes the Unit current state
@@ -670,6 +760,16 @@ mod test {
         println!("enabled services: {:#?}", services)
     }
     #[test]
+    fn test_failed_services() {
+        let services = ctl().list_failed_services().unwrap();
+        println!("failed services: {:#?}", services)
+    }
+    #[test]
+    fn test_running_services() {
+        let services = ctl().list_running_services().unwrap();
+        println!("running services: {:#?}", services)
+    }
+    #[test]
     fn test_non_existing_unit() {
         let unit = ctl().create_unit("non-existing");
         assert!(unit.is_err());
@@ -698,7 +798,7 @@ mod test {
     #[test]
     fn test_service_unit_construction() {
         let ctl = ctl();
-        let units = ctl.list_units(None, None, None).unwrap(); // all units
+        let units = ctl.list_unit_files(None, None, None).unwrap(); // all units
         for unit in units {
             let unit = unit.as_str();
             if unit.contains('@') {
@@ -725,7 +825,7 @@ mod test {
     }
     #[test]
     fn test_list_units_full() {
-        let units = ctl().list_units_full(None, None, None).unwrap(); // all units
+        let units = ctl().list_unit_files_full(None, None, None).unwrap(); // all units
         for unit in units {
             println!("####################################");
             println!("Unit: {}", unit.unit_file);
@@ -762,3 +862,4 @@ mod test {
         assert_eq!(u, reverse);
     }
 }
+
