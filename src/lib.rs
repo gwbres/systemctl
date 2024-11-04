@@ -57,7 +57,8 @@ impl SystemCtl {
         args: S,
     ) -> std::io::Result<String> {
         let mut child = self.spawn_child(args)?;
-        match child.wait()?.code() {
+        let output = child.wait_with_output()?;
+        match output.status.code() {
             Some(0) => {}, // success
             Some(1) => {}, // success -> Ok(Unit not found)
             Some(3) => {}, // success -> Ok(unit is inactive and/or dead)
@@ -83,8 +84,8 @@ impl SystemCtl {
             },
         }
 
-        let mut stdout: Vec<u8> = Vec::new();
-        let size = child.stdout.unwrap().read_to_end(&mut stdout)?;
+        let mut stdout: Vec<u8> = output.stdout;
+        let size = stdout.len();
 
         if size > 0 {
             if let Ok(s) = String::from_utf8(stdout) {
