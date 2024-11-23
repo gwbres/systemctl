@@ -1,7 +1,7 @@
 //! Crate to manage and monitor services through `systemctl`   
 //! Homepage: <https://github.com/gwbres/systemctl>
 #![doc=include_str!("../README.md")]
-use std::io::{Error, ErrorKind, Read};
+use std::io::{Error, ErrorKind};
 use std::process::{Child, ExitStatus};
 use std::str::FromStr;
 use strum_macros::EnumString;
@@ -56,8 +56,9 @@ impl SystemCtl {
         &'s self,
         args: S,
     ) -> std::io::Result<String> {
-        let mut child = self.spawn_child(args)?;
-        match child.wait()?.code() {
+        let child = self.spawn_child(args)?;
+        let output = child.wait_with_output()?;
+        match output.status.code() {
             Some(0) => {}, // success
             Some(1) => {}, // success -> Ok(Unit not found)
             Some(3) => {}, // success -> Ok(unit is inactive and/or dead)
@@ -83,8 +84,8 @@ impl SystemCtl {
             },
         }
 
-        let mut stdout: Vec<u8> = Vec::new();
-        let size = child.stdout.unwrap().read_to_end(&mut stdout)?;
+        let stdout: Vec<u8> = output.stdout;
+        let size = stdout.len();
 
         if size > 0 {
             if let Ok(s) = String::from_utf8(stdout) {
@@ -261,7 +262,10 @@ impl SystemCtl {
             .filter(|line| line.contains('.') && !line.ends_with('.'));
 
         for l in lines {
-            let parsed: Vec<&str> = l.split_ascii_whitespace().collect();
+            // fixes format for not found units
+            let slice = if l.starts_with("● ") { &l[3..] } else { l };
+
+            let parsed: Vec<&str> = slice.split_ascii_whitespace().collect();
 
             let description = parsed
                 .split_at(4)
@@ -832,6 +836,28 @@ mod test {
             println!("State: {}", unit.state);
             println!("Vendor Preset: {:?}", unit.vendor_preset);
             println!("####################################");
+        }
+    }
+
+    /// Test valid results for the --all argument
+    /// Example of broken output:
+    /// ```text
+    /// UnitService {
+    ///     unit_name: "●",
+    ///     loaded: "syslog.service",
+    ///     state: "not-found",
+    ///     sub_state: "inactive",
+    ///     description: " dead syslog.service",
+    /// }
+    ///```
+    #[test]
+    fn test_list_units_full_all() {
+        let ctl = SystemCtl::builder()
+            .additional_args(vec![String::from("--all")])
+            .build();
+        let units = ctl.list_units_full(None, None, None).unwrap(); // all units
+        for unit in units {
+            assert_ne!("●", unit.unit_name);
         }
     }
 
