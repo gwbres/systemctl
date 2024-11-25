@@ -1,4 +1,4 @@
-//! Crate to manage and monitor services through `systemctl`   
+//! Crate to manage and monitor services through `systemctl`
 //! Homepage: <https://github.com/gwbres/systemctl>
 #![doc=include_str!("../README.md")]
 use std::io::{Error, ErrorKind};
@@ -88,14 +88,14 @@ impl SystemCtl {
         let size = stdout.len();
 
         if size > 0 {
-            if let Ok(s) = String::from_utf8(stdout) {
-                return Ok(s);
+            return if let Ok(s) = String::from_utf8(stdout) {
+                Ok(s)
             } else {
-                return Err(Error::new(
+                Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid utf8 data in stdout",
-                ));
-            }
+                ))
+            };
         }
 
         // if this is reached all if's above did not work
@@ -187,7 +187,7 @@ impl SystemCtl {
         Ok(!unit_list.is_empty())
     }
 
-    /// Returns a `Vector` of `UnitList` structs extracted from systemctl listing.   
+    /// Returns a `Vector` of `UnitList` structs extracted from systemctl listing.
     ///  + type filter: optional `--type` filter
     ///  + state filter: optional `--state` filter
     ///  + glob filter: optional unit name filter
@@ -232,7 +232,7 @@ impl SystemCtl {
         Ok(result)
     }
 
-    /// Returns a `Vector` of `UnitService` structs extracted from systemctl listing.   
+    /// Returns a `Vector` of `UnitService` structs extracted from systemctl listing.
     ///  + type filter: optional `--type` filter
     ///  + state filter: optional `--state` filter
     ///  + glob filter: optional unit name filter
@@ -284,7 +284,7 @@ impl SystemCtl {
         Ok(result)
     }
 
-    /// Returns a `Vector` of unit names extracted from systemctl listing.   
+    /// Returns a `Vector` of unit names extracted from systemctl listing.
     ///  + type filter: optional `--type` filter
     ///  + state filter: optional `--state` filter
     ///  + glob filter: optional unit name filter
@@ -298,7 +298,7 @@ impl SystemCtl {
         Ok(list?.iter().map(|n| n.unit_file.clone()).collect())
     }
 
-    /// Returns a `Vector` of unit names extracted from systemctl listing.   
+    /// Returns a `Vector` of unit names extracted from systemctl listing.
     ///  + type filter: optional `--type` filter
     ///  + state filter: optional `--state` filter
     ///  + glob filter: optional unit name filter
@@ -374,10 +374,8 @@ impl SystemCtl {
                     let line = line.strip_suffix(')').unwrap();
                     let items: Vec<&str> = line.split(';').collect();
                     u.script = items[0].trim().to_string();
-                    u.auto_start = match AutoStartStatus::from_str(items[1].trim()) {
-                        Ok(x) => x,
-                        Err(_) => AutoStartStatus::Disabled,
-                    };
+                    u.auto_start = AutoStartStatus::from_str(items[1].trim())
+                        .unwrap_or(AutoStartStatus::Disabled);
                     if items.len() > 2 {
                         // preset is optionnal ?
                         u.preset = items[2].trim().ends_with("enabled");
@@ -611,13 +609,13 @@ impl Doc {
     }
 }
 
-impl std::str::FromStr for Doc {
-    type Err = std::io::Error;
+impl FromStr for Doc {
+    type Err = Error;
     /// Builds `Doc` from systemd status descriptor
     fn from_str(status: &str) -> Result<Self, Self::Err> {
         let items: Vec<&str> = status.split(':').collect();
         if items.len() != 2 {
-            return Err(std::io::Error::new(
+            return Err(Error::new(
                 ErrorKind::InvalidData,
                 "malformed doc descriptor",
             ));
@@ -629,10 +627,7 @@ impl std::str::FromStr for Doc {
             },
             "http" => Ok(Doc::Url("http:".to_owned() + items[1].trim())),
             "https" => Ok(Doc::Url("https:".to_owned() + items[1].trim())),
-            _ => Err(std::io::Error::new(
-                ErrorKind::InvalidData,
-                "unknown type of doc",
-            )),
+            _ => Err(Error::new(ErrorKind::InvalidData, "unknown type of doc")),
         }
     }
 }

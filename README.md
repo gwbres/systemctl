@@ -15,7 +15,7 @@ Small rust crate to interact with systemd units
 
 ## Limitations
 
-Currently SystemD Version <245 are not supported as unit-file-list changed from two column to three column setup. See: [SystemD Changelog](https://github.com/systemd/systemd/blob/16bfb12c8f815a468021b6e20871061d20b50f57/NEWS#L6073)
+Currently, systemd Version <245 are not supported as unit-file-list changed from two column to three column setup. See: [systemd Changelog](https://github.com/systemd/systemd/blob/16bfb12c8f815a468021b6e20871061d20b50f57/NEWS#L6073)
 
 ## Unit / service operation
 
