@@ -1,6 +1,10 @@
 # systemctl
 
-Small rust crate to interact with systemd units
+Small rust crate to interact with systemd units through `systemctl`.
+
+At the time I needed those features, I was not aware of `zbus-systemd`, which is now available and should be prefered.  
+This crate uses `systemctl` interaction directly, which is far from ideal for applications.
+`zbus-systemd` should therefore be prefered.
 
 [![crates.io](https://img.shields.io/crates/v/systemctl.svg)](https://crates.io/crates/systemctl)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/gwbres/systemctl/blob/main/LICENSE-APACHE)
