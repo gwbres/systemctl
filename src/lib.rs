@@ -173,8 +173,12 @@ impl SystemCtl {
     /// Returns a list of services that are dependencies of the given unit
     pub fn list_dependencies(&self, unit: &str) -> std::io::Result<Vec<String>> {
         let output = self.systemctl_capture(vec!["list-dependencies", unit])?;
+        Self::list_dependencies_from_raw(output)
+    }
+
+    pub fn list_dependencies_from_raw(raw: String) -> std::io::Result<Vec<String>> {
         let mut dependencies = Vec::<String>::new();
-        for line in output.lines().skip(1) {
+        for line in raw.lines().skip(1) {
             dependencies.push(String::from(
                 line.replace(|c: char| !c.is_ascii(), "").trim(),
             ));
@@ -275,31 +279,28 @@ impl SystemCtl {
         if let Some(glob) = glob {
             args.push(glob)
         }
-        let mut result: Vec<UnitService> = Vec::new();
-        let content = self.systemctl_capture(args.clone())?;
+        let content = self.systemctl_capture(args)?;
+        Self::list_units_full_from_raw(content)
+    }
 
-        let lines = content
+    pub fn list_units_full_from_raw(raw: String) -> std::io::Result<Vec<UnitService>> {
+        let mut result: Vec<UnitService> = Vec::new();
+
+        let lines = raw
             .lines()
             .filter(|line| line.contains('.') && !line.ends_with('.'));
 
         for l in lines {
             // fixes format for not found units
             let slice = if l.starts_with("● ") { &l[3..] } else { l };
-
             let parsed: Vec<&str> = slice.split_ascii_whitespace().collect();
-
-            let description = parsed
-                .split_at(4)
-                .1
-                .iter()
-                .fold("".to_owned(), |acc, str| format!("{} {}", acc, str));
 
             result.push(UnitService {
                 unit_name: parsed[0].to_string(),
                 loaded: LoadedState::from_str(parsed[1]).unwrap_or(LoadedState::Unknown),
                 active: ActiveState::from_str(parsed[2]).unwrap_or(ActiveState::Unknown),
                 sub_state: parsed[3].to_string(),
-                description,
+                description: parsed[4..].join(" "),
             })
         }
         Ok(result)
