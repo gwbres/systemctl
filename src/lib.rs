@@ -296,8 +296,8 @@ impl SystemCtl {
 
             result.push(UnitService {
                 unit_name: parsed[0].to_string(),
-                loaded: parsed[1].to_string(),
-                state: parsed[2].to_string(),
+                loaded: LoadedState::from_str(parsed[1]).unwrap_or(LoadedState::Unknown),
+                active: ActiveState::from_str(parsed[2]).unwrap_or(ActiveState::Unknown),
                 sub_state: parsed[3].to_string(),
                 description,
             })
@@ -511,9 +511,9 @@ pub struct UnitService {
     /// Unit name: `name.type`
     pub unit_name: String,
     /// Loaded state
-    pub loaded: String,
+    pub loaded: LoadedState,
     /// Unit state
-    pub state: String,
+    pub active: ActiveState,
     /// Unit substate
     pub sub_state: String,
     /// Unit description
@@ -571,12 +571,15 @@ pub enum Type {
 /// `LoadedState` describes a Unit's current loaded state
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "serde"), derive(strum_macros::Display))]
 pub enum LoadedState {
-    #[strum(serialize = "masked")]
+    #[strum(serialize = "masked", to_string = "Masked")]
     #[default]
     Masked,
-    #[strum(serialize = "loaded")]
+    #[strum(serialize = "loaded", to_string = "Loaded")]
     Loaded,
+    #[strum(serialize = "", to_string = "Unknown")]
+    Unknown,
 }
 
 /// `ActiveState` describes a Unit's current active state
@@ -595,6 +598,10 @@ pub enum ActiveState {
     Deactivating,
     #[strum(serialize = "failed", to_string = "Failed")]
     Failed,
+    #[strum(serialize = "reloading", to_string = "Reloading")]
+    Reloading,
+    #[strum(serialize = "", to_string = "Unknown")]
+    Unknown,
 }
 
 /*
