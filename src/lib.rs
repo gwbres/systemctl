@@ -180,7 +180,7 @@ impl SystemCtl {
             ));
         }
         Ok(dependencies)
-}
+    }
 
     /// Isolates given unit, only self and its dependencies are
     /// now actively running
