@@ -170,6 +170,18 @@ impl SystemCtl {
         )
     }
 
+    /// Returns a list of services that are dependencies of the given unit
+    pub fn list_dependencies(&self, unit: &str) -> std::io::Result<Vec<String>> {
+        let output = self.systemctl_capture(vec!["list-dependencies", unit])?;
+        let mut dependencies = Vec::<String>::new();
+        for line in output.lines().skip(1) {
+            dependencies.push(String::from(
+                line.replace(|c: char| !c.is_ascii(), "").trim(),
+            ));
+        }
+        Ok(dependencies)
+}
+
     /// Isolates given unit, only self and its dependencies are
     /// now actively running
     pub fn isolate(&self, unit: &str) -> std::io::Result<ExitStatus> {
@@ -851,6 +863,7 @@ mod test {
             }
         }
     }
+
     #[test]
     fn test_list_units_full() {
         let units = ctl().list_unit_files_full(None, None, None).unwrap(); // all units
@@ -882,6 +895,14 @@ mod test {
         let units = ctl.list_units_full(None, None, None).unwrap(); // all units
         for unit in units {
             assert_ne!("●", unit.unit_name);
+        }
+    }
+
+    #[test]
+    fn test_list_dependencies() {
+        let units = ctl().list_dependencies("sound.target").unwrap();
+        for unit in units {
+            println!("{unit}");
         }
     }
 
