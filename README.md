@@ -55,6 +55,9 @@ systemctl.list_units(Some("service"), Some("enabled"), None);
 
 // list all services starting with cron
 systemctl.list_units(Some("service"), None, Some("cron*"));
+
+// Check if a unit is active
+systemctl.get_active_state("service");
 ```
 
 ## Unit structure

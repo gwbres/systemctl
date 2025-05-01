@@ -65,7 +65,7 @@ impl SystemCtl {
             Some(4) => {
                 return Err(Error::new(
                     ErrorKind::PermissionDenied,
-                    "Missing Priviledges or Unit not found",
+                    "Missing privileges or unit not found",
                 ))
             },
             // unknown errorcodes
@@ -156,6 +156,18 @@ impl SystemCtl {
     pub fn is_active(&self, unit: &str) -> std::io::Result<bool> {
         let status = self.systemctl_capture(["is-active", unit])?;
         Ok(status.trim_end().eq("active"))
+    }
+
+    /// Returns active state of the given `unit`
+    pub fn get_active_state(&self, unit: &str) -> std::io::Result<ActiveState> {
+        let status = self.systemctl_capture(vec!["is-active", unit])?;
+        ActiveState::from_str(&status.trim_end()).map_or(
+            Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("Invalid status {}", status),
+            )),
+            |x| Ok(x),
+        )
     }
 
     /// Isolates given unit, only self and its dependencies are
@@ -366,7 +378,7 @@ impl SystemCtl {
             if let Some(line) = line.strip_prefix("Loaded: ") {
                 // Match and get rid of "Loaded: "
                 if let Some(line) = line.strip_prefix("loaded ") {
-                    u.state = State::Loaded;
+                    u.loaded_state = LoadedState::Loaded;
                     let line = line.strip_prefix('(').unwrap();
                     let line = line.strip_suffix(')').unwrap();
                     let items: Vec<&str> = line.split(';').collect();
@@ -378,7 +390,7 @@ impl SystemCtl {
                         u.preset = items[2].trim().ends_with("enabled");
                     }
                 } else if line.starts_with("masked") {
-                    u.state = State::Masked;
+                    u.loaded_state = LoadedState::Masked;
                 }
             } else if let Some(line) = line.strip_prefix("Transient: ") {
                 if line == "yes" {
@@ -544,15 +556,33 @@ pub enum Type {
     Swap,
 }
 
-/// `State` describes a Unit current state
+/// `LoadedState` describes a Unit's current loaded state
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum State {
+pub enum LoadedState {
     #[strum(serialize = "masked")]
     #[default]
     Masked,
     #[strum(serialize = "loaded")]
     Loaded,
+}
+
+/// `ActiveState` describes a Unit's current active state
+#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "serde"), derive(strum_macros::Display))]
+pub enum ActiveState {
+    #[default]
+    #[strum(serialize = "inactive", to_string = "Inactive")]
+    Inactive,
+    #[strum(serialize = "active", to_string = "Active")]
+    Active,
+    #[strum(serialize = "activating", to_string = "Activating")]
+    Activating,
+    #[strum(serialize = "deactivating", to_string = "Deactivating")]
+    Deactivating,
+    #[strum(serialize = "failed", to_string = "Failed")]
+    Failed,
 }
 
 /*
@@ -641,8 +671,8 @@ pub struct Unit {
     pub utype: Type,
     /// Optional unit description
     pub description: Option<String>,
-    /// Current state
-    pub state: State,
+    /// Current loaded state
+    pub loaded_state: LoadedState,
     /// Auto start feature
     pub auto_start: AutoStartStatus,
     /// `true` if Self is actively running
@@ -864,7 +894,7 @@ mod test {
             .get_or_insert_with(Vec::new)
             .push(Doc::Man("some instruction".into()));
         u.auto_start = AutoStartStatus::Transient;
-        u.state = State::Loaded;
+        u.loaded_state = LoadedState::Loaded;
         u.utype = Type::Socket;
         // serde
         let json_u = serde_json::to_string(&u).unwrap();
