@@ -161,12 +161,12 @@ impl SystemCtl {
     /// Returns active state of the given `unit`
     pub fn get_active_state(&self, unit: &str) -> std::io::Result<ActiveState> {
         let status = self.systemctl_capture(vec!["is-active", unit])?;
-        ActiveState::from_str(&status.trim_end()).map_or(
+        ActiveState::from_str(status.trim_end()).map_or(
             Err(Error::new(
                 ErrorKind::InvalidData,
                 format!("Invalid status {}", status),
             )),
-            |x| Ok(x),
+            Ok,
         )
     }
 
