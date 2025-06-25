@@ -70,11 +70,8 @@ impl SystemCtl {
             },
             // unknown errorcodes
             Some(code) => {
-                return Err(Error::new(
-                    // TODO: Maybe a better ErrorKind, none really seem to fit
-                    ErrorKind::Other,
-                    format!("Process exited with code: {code}"),
-                ));
+                // TODO: Maybe a better ErrorKind, none really seem to fit
+                return Err(Error::other(format!("Process exited with code: {code}")));
             },
             None => {
                 return Err(Error::new(
@@ -442,7 +439,7 @@ impl SystemCtl {
             }
         }
 
-        if let Ok(content) = self.cat(name) {
+        if let Ok(content) = self.cat(name_raw) {
             let line_tuple = content
                 .lines()
                 .filter_map(|line| line.split_once('=').to_owned());
@@ -463,7 +460,7 @@ impl SystemCtl {
             }
         }
 
-        u.active = self.is_active(name)?;
+        u.active = self.is_active(name_raw)?;
         u.name = name.to_string();
         Ok(u)
     }
@@ -543,6 +540,8 @@ pub enum Type {
     Path,
     #[strum(serialize = "target")]
     Target,
+    #[strum(serialize = "swap")]
+    Swap,
 }
 
 /// `State` describes a Unit current state
@@ -723,7 +722,7 @@ mod test {
 
     #[test]
     fn test_is_active() {
-        let units = ["sshd", "dropbear", "ntpd"];
+        let units = ["ssh", "nginx", "rsync"];
         let ctl = ctl();
         for u in units {
             let active = ctl.is_active(u);
