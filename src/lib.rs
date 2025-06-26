@@ -65,7 +65,7 @@ impl SystemCtl {
             Some(4) => {
                 return Err(Error::new(
                     ErrorKind::PermissionDenied,
-                    "Missing Priviledges or Unit not found",
+                    "Missing privileges or unit not found",
                 ))
             },
             // unknown errorcodes
@@ -156,6 +156,34 @@ impl SystemCtl {
     pub fn is_active(&self, unit: &str) -> std::io::Result<bool> {
         let status = self.systemctl_capture(["is-active", unit])?;
         Ok(status.trim_end().eq("active"))
+    }
+
+    /// Returns active state of the given `unit`
+    pub fn get_active_state(&self, unit: &str) -> std::io::Result<ActiveState> {
+        let status = self.systemctl_capture(vec!["is-active", unit])?;
+        ActiveState::from_str(status.trim_end()).map_or(
+            Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("Invalid status {}", status),
+            )),
+            Ok,
+        )
+    }
+
+    /// Returns a list of services that are dependencies of the given unit
+    pub fn list_dependencies(&self, unit: &str) -> std::io::Result<Vec<String>> {
+        let output = self.systemctl_capture(vec!["list-dependencies", unit])?;
+        Self::list_dependencies_from_raw(output)
+    }
+
+    pub fn list_dependencies_from_raw(raw: String) -> std::io::Result<Vec<String>> {
+        let mut dependencies = Vec::<String>::new();
+        for line in raw.lines().skip(1) {
+            dependencies.push(String::from(
+                line.replace(|c: char| !c.is_ascii(), "").trim(),
+            ));
+        }
+        Ok(dependencies)
     }
 
     /// Isolates given unit, only self and its dependencies are
@@ -251,31 +279,28 @@ impl SystemCtl {
         if let Some(glob) = glob {
             args.push(glob)
         }
-        let mut result: Vec<UnitService> = Vec::new();
-        let content = self.systemctl_capture(args.clone())?;
+        let content = self.systemctl_capture(args)?;
+        Self::list_units_full_from_raw(content)
+    }
 
-        let lines = content
+    pub fn list_units_full_from_raw(raw: String) -> std::io::Result<Vec<UnitService>> {
+        let mut result: Vec<UnitService> = Vec::new();
+
+        let lines = raw
             .lines()
             .filter(|line| line.contains('.') && !line.ends_with('.'));
 
         for l in lines {
             // fixes format for not found units
             let slice = if l.starts_with("● ") { &l[3..] } else { l };
-
             let parsed: Vec<&str> = slice.split_ascii_whitespace().collect();
-
-            let description = parsed
-                .split_at(4)
-                .1
-                .iter()
-                .fold("".to_owned(), |acc, str| format!("{} {}", acc, str));
 
             result.push(UnitService {
                 unit_name: parsed[0].to_string(),
-                loaded: parsed[1].to_string(),
-                state: parsed[2].to_string(),
+                loaded: LoadedState::from_str(parsed[1]).unwrap_or(LoadedState::Unknown),
+                active: ActiveState::from_str(parsed[2]).unwrap_or(ActiveState::Unknown),
                 sub_state: parsed[3].to_string(),
-                description,
+                description: parsed[4..].join(" "),
             })
         }
         Ok(result)
@@ -366,7 +391,7 @@ impl SystemCtl {
             if let Some(line) = line.strip_prefix("Loaded: ") {
                 // Match and get rid of "Loaded: "
                 if let Some(line) = line.strip_prefix("loaded ") {
-                    u.state = State::Loaded;
+                    u.loaded_state = LoadedState::Loaded;
                     let line = line.strip_prefix('(').unwrap();
                     let line = line.strip_suffix(')').unwrap();
                     let items: Vec<&str> = line.split(';').collect();
@@ -378,7 +403,7 @@ impl SystemCtl {
                         u.preset = items[2].trim().ends_with("enabled");
                     }
                 } else if line.starts_with("masked") {
-                    u.state = State::Masked;
+                    u.loaded_state = LoadedState::Masked;
                 }
             } else if let Some(line) = line.strip_prefix("Transient: ") {
                 if line == "yes" {
@@ -487,9 +512,9 @@ pub struct UnitService {
     /// Unit name: `name.type`
     pub unit_name: String,
     /// Loaded state
-    pub loaded: String,
+    pub loaded: LoadedState,
     /// Unit state
-    pub state: String,
+    pub active: ActiveState,
     /// Unit substate
     pub sub_state: String,
     /// Unit description
@@ -544,15 +569,40 @@ pub enum Type {
     Swap,
 }
 
-/// `State` describes a Unit current state
+/// `LoadedState` describes a Unit's current loaded state
 #[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum State {
-    #[strum(serialize = "masked")]
+#[cfg_attr(not(feature = "serde"), derive(strum_macros::Display))]
+pub enum LoadedState {
+    #[strum(serialize = "masked", to_string = "Masked")]
     #[default]
     Masked,
-    #[strum(serialize = "loaded")]
+    #[strum(serialize = "loaded", to_string = "Loaded")]
     Loaded,
+    #[strum(serialize = "", to_string = "Unknown")]
+    Unknown,
+}
+
+/// `ActiveState` describes a Unit's current active state
+#[derive(Copy, Clone, PartialEq, Eq, EnumString, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "serde"), derive(strum_macros::Display))]
+pub enum ActiveState {
+    #[default]
+    #[strum(serialize = "inactive", to_string = "Inactive")]
+    Inactive,
+    #[strum(serialize = "active", to_string = "Active")]
+    Active,
+    #[strum(serialize = "activating", to_string = "Activating")]
+    Activating,
+    #[strum(serialize = "deactivating", to_string = "Deactivating")]
+    Deactivating,
+    #[strum(serialize = "failed", to_string = "Failed")]
+    Failed,
+    #[strum(serialize = "reloading", to_string = "Reloading")]
+    Reloading,
+    #[strum(serialize = "", to_string = "Unknown")]
+    Unknown,
 }
 
 /*
@@ -641,8 +691,8 @@ pub struct Unit {
     pub utype: Type,
     /// Optional unit description
     pub description: Option<String>,
-    /// Current state
-    pub state: State,
+    /// Current loaded state
+    pub loaded_state: LoadedState,
     /// Auto start feature
     pub auto_start: AutoStartStatus,
     /// `true` if Self is actively running
@@ -821,6 +871,7 @@ mod test {
             }
         }
     }
+
     #[test]
     fn test_list_units_full() {
         let units = ctl().list_unit_files_full(None, None, None).unwrap(); // all units
@@ -855,6 +906,14 @@ mod test {
         }
     }
 
+    #[test]
+    fn test_list_dependencies() {
+        let units = ctl().list_dependencies("sound.target").unwrap();
+        for unit in units {
+            println!("{unit}");
+        }
+    }
+
     #[cfg(feature = "serde")]
     #[test]
     fn test_serde_for_unit() {
@@ -864,7 +923,7 @@ mod test {
             .get_or_insert_with(Vec::new)
             .push(Doc::Man("some instruction".into()));
         u.auto_start = AutoStartStatus::Transient;
-        u.state = State::Loaded;
+        u.loaded_state = LoadedState::Loaded;
         u.utype = Type::Socket;
         // serde
         let json_u = serde_json::to_string(&u).unwrap();
