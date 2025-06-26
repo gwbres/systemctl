@@ -13,6 +13,9 @@ const SYSTEMCTL_PATH: &str = "/usr/bin/systemctl";
 
 use bon::Builder;
 
+mod service_property;
+pub use service_property::ServiceProperty;
+
 /// Struct with API calls to systemctl.
 ///
 /// Use the `::default()` impl if you don't need special arguments.
@@ -488,6 +491,21 @@ impl SystemCtl {
         u.active = self.is_active(name_raw)?;
         u.name = name.to_string();
         Ok(u)
+    }
+
+    /// Show service property using systemctl show --property
+    pub fn show(&self, property: ServiceProperty, unit: &str) -> std::io::Result<Option<String>> {
+        let mut content =
+            self.systemctl_capture(["show", "--property", property.into(), "--value", unit])?;
+        if content.ends_with('\n') {
+            // remove line break at the end of the line, but keep other whitespaces
+            content.pop();
+        }
+        Ok(if content.as_str() != "[not set]" {
+            Some(content)
+        } else {
+            None
+        })
     }
 }
 
