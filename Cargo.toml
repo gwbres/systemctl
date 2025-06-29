@@ -4,7 +4,7 @@ version = "0.5.0"
 license = "MIT OR Apache-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Small crate to interact with systemd units"
-homepage = "https://github.com/gwbres/systemctl"
+repository = "https://github.com/gwbres/systemctl"
 edition = "2021"
 readme = "README.md"
 
